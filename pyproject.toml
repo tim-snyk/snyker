@@ -11,7 +11,7 @@ authors = [
 description = "Collection of utilities leveraging the Snyk API and a wrapper for the Snyk CLI"
 readme = "README.md"
 license = "Apache-2.0" # Or specify license text
-requires-python = ">=3.8" # Specify the Python versions your package supports
+requires-python = ">=3.10" # Specify the Python versions your package supports
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
