@@ -54,7 +54,7 @@ jobs:
           uv pip install .[test]
           # If pytest and flake8 are not in pyproject.toml's test extras,
           # you would install them explicitly (already covered by .[test] if configured):
-          # uv pip install pytest flake8
+          uv pip install pytest flake8
           # The following `uv pip install .` might be redundant if .[test] already installs the package in editable mode
           # or if your tests don't require the package to be separately installed after .[test].
           # If .[test] handles it, you can remove the line below.
