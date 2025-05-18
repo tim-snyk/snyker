@@ -1,10 +1,46 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "snyk-tools"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "httpx>=0.28.1",
-    "mcp[cli]>=1.8.0",
+name = "snyker" # Replace with your package's actual name
+version = "0.1.0"          # Replace with your package's version
+authors = [
+    { name = "Tim Gowan", email = "tim.gowan@snyk.io" },
 ]
+description = "A short description of my awesome package."
+readme = "README.md"
+license = { file = "LICENSE" } # Or specify license text
+requires-python = ">=3.8" # Specify the Python versions your package supports
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache License", # Choose your license
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+keywords = ["snyk", "snyk-cli","snyk-cli", "automation", "security"] # Add relevant keywords
+
+# This is the section derived from your import statements
+dependencies = [
+    "requests>=2.31.0", # For 'import requests'
+    "python-dateutil",  # For 'import dateutil'
+    "urllib3",          # For 'from urllib3.util.retry import Retry'
+    "httpx>=0.28.1",    # For 'import httpx'
+    "mcp[cli]>=1.8.0",  # For 'import mcp'
+
+]
+
+[project.urls]
+"Homepage" = "https://github.com/tim-snyk/snyker"
+"Bug Tracker" = "https://github.com/tim-snyk/snyker/issues"
+"Documentation" = "https://github.com/tim-snyk/snyker/blob/main/README.md"
+
+# Optional: if you have command-line scripts
+# [project.scripts]
+# my-command = "my_awesome_package.module:main_function"

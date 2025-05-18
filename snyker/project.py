@@ -7,7 +7,6 @@ from urllib.parse import quote
 import traceback
 import threading
 import logging
-from api_client import APIClient
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
