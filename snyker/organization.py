@@ -1,6 +1,9 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, List, Dict, Optional
+
+if TYPE_CHECKING:
+    from .issue import Issue
 import os
-from api_client import APIClient
-import json
 from group import Group
 
 token = os.getenv('SNYK_TOKEN')  # Set your API token as an environment variable
@@ -10,10 +13,8 @@ class Organization:
     def __init__(self, org_id, group=None, api_client=None, params: dict = {}):
         if group is None:
             self.group = Group()
-        if api_client is None and group is not None:
+        if api_client is None:
             self.api_client = group.api_client
-        else:
-            self.api_client = SnykApiClient(max_retries=15, backoff_factor=1)
         self.logger = self.api_client.logger
         self.id = org_id
         self.raw = self.getOrg(params=params)
@@ -24,7 +25,7 @@ class Organization:
         self.slug = self.raw['data']['attributes']['slug']
 
 
-    def get_issues(self, params: dict = {}) -> list['Issue']:
+    def get_issues(self, params: dict = {}) -> list[Issue]:
         from issue import Issue
         '''
         # GET /rest/orgs/{orgId}/issues
@@ -85,7 +86,7 @@ class Organization:
         )
         return response.json()
 
-    def listIntegrations(self, params: dict = {}) -> 'integrations':
+    def listIntegrations(self, params: dict = {}) -> List[dict]:
         '''
         # GET https://api.snyk.io/v1/org/{orgId}/integrations
         '''

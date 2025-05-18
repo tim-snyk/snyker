@@ -1,12 +1,18 @@
+from __future__ import annotations
+
 import json
 from snyker import APIClient
+from typing import TYPE_CHECKING, List
+
+if TYPE_CHECKING:
+    from .asset import Asset
+    from .organization import Organization
+    from .issue import Issue
 
 api_version = "2024-10-15"  # Set the API version.
 
-
-
 class Group:
-    def __init__(self, group_id=None, api_client=None, params: dict = {}):
+    def __init__(self, group_id=None):
         self.api_client = APIClient(max_retries=15, backoff_factor=1)
         self.logger = self.api_client.logger
         if group_id is None:
@@ -18,7 +24,7 @@ class Group:
                 },
                 params={
                     'version': api_version,
-                    'limit': 10
+                    'limit': 100
                 }
             ).json()
             if len(response['data']) == 1:
@@ -34,7 +40,7 @@ class Group:
         self.issues = None
         self.logger.info(f"[Group ID: {self.id}].__init__ created group object")
 
-    def get_asset(self, asset_id, params: dict = {}) -> 'Asset':
+    def get_asset(self, asset_id, params: dict = {}) -> Asset:
         from asset import Asset
         '''
         # GET /closed-beta/groups/{groupId}/assets/{assetId}?version={apiVersion}
@@ -57,7 +63,7 @@ class Group:
         asset = response.json()['data']
         return Asset(asset, self)
 
-    def get_assets(self, query: dict, params: dict = {}) -> list['Asset']:
+    def get_assets(self, query: dict, params: dict = {}) -> list[Asset]:
         from asset import Asset
         '''
         # POST /closed-beta/groups/{groupId}/assets/search?version={apiVersion}
@@ -94,7 +100,7 @@ class Group:
         self.logger.info(f"[Group ID: {self.id}].get_assets found {len(assets)} assets")
         return assets
 
-    def get_orgs(self, org_name=None, org_slug=None, params: dict = {}) -> list['Organization']:
+    def get_orgs(self, org_name=None, org_slug=None, params: dict = {}) -> list[Organization]:
         from organization import Organization
         '''
         # GET /rest/groups/{group_id}/orgs
@@ -132,7 +138,7 @@ class Group:
         self.logger.info(f"[Group ID: {self.id}].get_orgs found {len(organizations)} organizations")
         return organizations
 
-    def get_issues(self, params: dict = None) -> list['Issue']:
+    def get_issues(self, params: dict = None) -> list[Issue]:
         from issue import Issue
         '''
         # GET /rest/groups/{groupId}/issues?version={apiVersion}
