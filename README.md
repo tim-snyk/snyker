@@ -1,4 +1,4 @@
-# snyker
+# Snyker SDK
 
 DISCLAIMER: This is just a personal project and not officially covered by support nor directly endorsed by Snyk.
 
@@ -10,3 +10,5 @@ DISCLAIMER: This is just a personal project and not officially covered by suppor
 [link](https://docs.snyk.io/working-with-snyk/regional-hosting-and-data-residency#available-snyk-regions)
 
 
+**Guide:**
+Read through and run main.py.
