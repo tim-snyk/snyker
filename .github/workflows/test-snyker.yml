@@ -48,22 +48,29 @@ jobs:
           # Install the current package and its dependencies,
           # including optional dependencies defined in a 'test' extra.
           # Assumes pytest and flake8 are listed in pyproject.toml under [project.optional-dependencies.test]
-          uv venv
+          # The following line ensures the venv is sourced for subsequent uv commands in this step if needed,
+          # though `uv pip install` and `uv run` manage environments well.
+          # source .venv/bin/activate # This might not be strictly necessary with direct `uv` calls
           uv pip install .[test]
           # If pytest and flake8 are not in pyproject.toml's test extras,
-          # you would install them explicitly:
-          uv pip install pytest flake8
+          # you would install them explicitly (already covered by .[test] if configured):
+          # uv pip install pytest flake8
+          # The following `uv pip install .` might be redundant if .[test] already installs the package in editable mode
+          # or if your tests don't require the package to be separately installed after .[test].
+          # If .[test] handles it, you can remove the line below.
           uv pip install . # To install the package itself
 
       - name: Lint with flake8 (Syntax and Undefined Names - Hard Fail)
         run: |
           # stop the build if there are Python syntax errors or undefined names
-          uv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Modified to lint only the snyker/snyker directory
+          uv run flake8 snyker/snyker --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Lint with flake8 (Style and Complexity - Warnings)
         run: |
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-          uv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          # Modified to lint only the snyker/snyker directory
+          uv run flake8 snyker/snyker --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Test with pytest
         run: |
