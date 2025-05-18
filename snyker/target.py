@@ -2,9 +2,6 @@ import traceback
 import requests
 import datetime
 
-from .api_client import SnykApiClient
-
-
 class Project:
     def __init__(self, organization, project_id):
         self.organization = organization
