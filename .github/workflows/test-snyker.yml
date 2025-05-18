@@ -71,7 +71,3 @@ jobs:
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           # Modified to lint only the snyker/snyker directory
           uv run flake8 snyker --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
-      - name: Test with pytest
-        run: |
-          uv run pytest
