@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, List, Dict, Optional
 if TYPE_CHECKING:
     from .issue import Issue
 import os
-from group import Group
+from snyker.group import Group
 
 token = os.getenv('SNYK_TOKEN')  # Set your API token as an environment variable
 apiVersion = "2024-10-15"  # Set the API version.

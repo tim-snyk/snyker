@@ -12,8 +12,11 @@ if TYPE_CHECKING:
 api_version = "2024-10-15"  # Set the API version.
 
 class Group:
-    def __init__(self, group_id=None):
-        self.api_client = APIClient(max_retries=15, backoff_factor=1)
+    def __init__(self, group_id=None, api_client: APIClient = None, params: dict = {}):
+        if api_client is None:
+            self.api_client = APIClient(max_retries=15, backoff_factor=1, logging_level=20)
+        else:
+            self.api_client = api_client
         self.logger = self.api_client.logger
         if group_id is None:
             response = self.api_client.get(
@@ -41,7 +44,7 @@ class Group:
         self.logger.info(f"[Group ID: {self.id}].__init__ created group object")
 
     def get_asset(self, asset_id, params: dict = {}) -> Asset:
-        from asset import Asset
+        from snyker.asset import Asset
         '''
         # GET /closed-beta/groups/{groupId}/assets/{assetId}?version={apiVersion}
         '''
@@ -64,7 +67,7 @@ class Group:
         return Asset(asset, self)
 
     def get_assets(self, query: dict, params: dict = {}) -> list[Asset]:
-        from asset import Asset
+        from snyker.asset import Asset
         '''
         # POST /closed-beta/groups/{groupId}/assets/search?version={apiVersion}
         '''
@@ -101,7 +104,7 @@ class Group:
         return assets
 
     def get_orgs(self, org_name=None, org_slug=None, params: dict = {}) -> list[Organization]:
-        from organization import Organization
+        from snyker.organization import Organization
         '''
         # GET /rest/groups/{group_id}/orgs
         '''
@@ -139,7 +142,7 @@ class Group:
         return organizations
 
     def get_issues(self, params: dict = None) -> list[Issue]:
-        from issue import Issue
+        from snyker.issue import Issue
         '''
         # GET /rest/groups/{groupId}/issues?version={apiVersion}
         '''
@@ -171,45 +174,3 @@ class Group:
         self.logger.info(f"[Group ID: {self.id}].get_issues found {len(issues)} issues")
         return issues
 
-
-# Example Usage:
-if __name__ == "__main__":
-    group = Group(group_id='9365faba-3e72-4fda-9974-267779137aa6',
-                  api_client=APIClient(max_retries=15, backoff_factor=1))
-
-    # Example showing how to get all organizations in a group
-    group.orgs = group.get_orgs()
-
-    # Example showing how to get issues in a group based on certain url filter parameters
-    group.issues = group.get_issues(params={
-        "scan_item.id": "d11d314a-2cbd-44b6-82cb-7b9d6a8df6e5",
-        "scan_item.type": "project",
-        "type": "code",
-    })
-    test_query = {
-        "query": {
-            "attributes": {
-                "attribute": "type",
-                "operator": "equal",
-                "values": [
-                    "repository"
-                ]
-            }
-        }
-    }
-    group.assets = group.get_assets(query=test_query)
-    exit(0)
-
-    # Example showing how to get all projects from a specific asset
-    asset = group.get_asset('661f4490e4407a0906459156b5781e7d')  # Repository Asset
-    print(json.dumps(asset.raw, indent=4))
-    asset.projects = asset.get_projects()
-    for project in asset.projects if asset.projects is not None else []:
-        print(json.dumps(project.raw, indent=4))  # Print the raw project data
-    print(f"Total Projects: {len(asset.projects)}")
-
-
-    # Example of showing how to print specific assets of various types
-    print(json.dumps(group.get_asset('661f4490e4407a0906459156b5781e7d').raw, indent=4))  # Repository
-    print(json.dumps(group.get_asset('350d7498d292db18afa96d48bbd659ce').raw, indent=4))  # Package
-    print(json.dumps(group.get_asset('70d329c3d55b10bdc61b92012c6c6c9f').raw, indent=4))  # Container Image

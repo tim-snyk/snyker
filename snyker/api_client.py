@@ -14,11 +14,11 @@ class APIClient:
                  max_retries=15,
                  backoff_factor=0.5,
                  status_forcelist=(429, 500, 502, 503, 504),
-                 logging_level=20):
+                 logging_level=10): # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
 
         logging.basicConfig(level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
-        self.base_url = os.getenv('SNYK_API',
-                                  "https://api.snyk.io")  # Get region url from SNYK_API environment variable
+        self.base_url = os.getenv('SNYK_API',               # Get region url from SNYK_API environment variable
+                                  "https://api.snyk.io")    # Default to US_MT_GCP
         self.token = os.getenv('SNYK_TOKEN')  # Get your API token from SNYK_TOKEN environment variable
         self.session = requests.Session()
         self.logger = logging.getLogger(__name__)

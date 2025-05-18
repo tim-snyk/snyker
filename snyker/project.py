@@ -1,11 +1,9 @@
-import os
 import requests
 import json
-import dateutil
 import time
-from urllib.parse import quote
 import traceback
-import threading
+from . import Organization
+from . import Group
 
 apiVersion = "2024-10-15"  # Set the API version.
 
@@ -23,14 +21,19 @@ originUrls = {
 
 
 class Project:
-    def __init__(self, project_id, organization, group=None):
-        self.group = organization.group
+    def __init__(self, project_id: str,
+                 organization: Organization,
+                 group: Group = None,
+                 params: dict = {}):
+        if group is None:
+            self.group = Group()
+        self.organization = organization
+        self.group = group
         self.api_client = self.group.api_client
         self.logger = self.api_client.logger
-        self.organization = organization
         self.id = project_id
         # Getting project details because listProjectsInOrg does not provide enough metadata
-        self.raw = self.getProject()
+        self.raw = self.getProject(params=params)
         self.issues = None
         self.sarif = None
 
@@ -74,6 +77,7 @@ class Project:
         params = {
             'version': apiVersion,
         }
+        params.update(params)
         response = self.api_client.get(
             uri,
             headers=headers,

@@ -1,15 +1,18 @@
 from __future__ import annotations
 from urllib.parse import urlparse
 from typing import TYPE_CHECKING, List, Dict, Optional
+
 if TYPE_CHECKING:
     from .project import Project
+    from .organization import Organization
 
 api_version = "2024-10-15"  # Set the API version.
 
+
 class Asset:
     def __init__(self, asset, group=None):
+        from snyker.group import Group
         if group is None:
-            from group import Group
             self.group = Group()
         self.group = group
         self.api_client = group.api_client
@@ -26,7 +29,6 @@ class Asset:
         self.asset_class = asset['attributes'].get('class')
         if 'issues_counts' in asset['attributes']:
             self.issues_counts = asset['attributes'].get('issues_counts')
-
 
         # list
         self.sources = asset['attributes']['sources']
@@ -76,8 +78,13 @@ class Asset:
         return github_name, github_owner
 
     def get_projects(self, params: dict = {}) -> list[Project]:
-        from project import Project
-        from organization import Organization
+        """
+        Get all projects associated with the asset.
+        :param params:
+        :return:
+        """
+        from snyker.project import Project
+        from snyker.organization import Organization
         if 'snyk' not in self.sources:
             self.logger.warning(f"Asset {self.id} does not have a Snyk source. Cannot extract projects.")
             return None
@@ -97,10 +104,29 @@ class Asset:
             params=params,
         ).json()
         for project in response['data']:
-            project = Project(organization=Organization(org_id=project['attributes']['organization_id'],
+            project = Project(project_id=project['id'],
+                              organization=Organization(org_id=project['attributes']['organization_id'],
                                                         group=self.group),
-                              project_id=project['id'],
-                              group=self.group)
+                              group=self.group,
+                              params=params)
             projects.append(project)
         self.projects = projects
+        self.logger.info(f"[Asset ID: {self.id}].get_projects found {len(projects)} projects")
         return projects
+
+    def get_orgs(self, params: dict = {}) -> list[Organization]:
+        """
+        Get all organizations associated with the asset.
+        :return:
+        """
+        from snyker.organization import Organization
+        if 'snyk' not in self.sources:
+            self.logger.warning(f"Asset {self.id} does not have a Snyk source. Cannot extract organizations.")
+            return None
+        organizations = []
+        for organization in self.raw['attributes']['organizations']:
+            organization = Organization(org_id=organization['id'], group=self.group, params=params)
+            organizations.append(organization)
+        self.organizations = organizations
+        self.logger.info(f"[Asset ID: {self.id}].get_orgs found {len(organizations)} organizations")
+        return organizations
