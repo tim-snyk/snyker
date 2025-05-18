@@ -38,17 +38,22 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           # Verify installation
           uv --version
-
+          
+      - name: Create venv (Python package installer and resolver)
+        run: |
+          uv venv # initialize venv
+          
       - name: Install project dependencies (including test tools)
         run: |
           # Install the current package and its dependencies,
           # including optional dependencies defined in a 'test' extra.
           # Assumes pytest and flake8 are listed in pyproject.toml under [project.optional-dependencies.test]
+          uv venv
           uv pip install .[test]
           # If pytest and flake8 are not in pyproject.toml's test extras,
           # you would install them explicitly:
-          # uv pip install pytest flake8
-          # uv pip install . # To install the package itself
+          uv pip install pytest flake8
+          uv pip install . # To install the package itself
 
       - name: Lint with flake8 (Syntax and Undefined Names - Hard Fail)
         run: |

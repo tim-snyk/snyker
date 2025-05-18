@@ -169,7 +169,7 @@ class Group:
 # Example Usage:
 if __name__ == "__main__":
     group = Group(group_id='9365faba-3e72-4fda-9974-267779137aa6',
-                  api_client=SnykApiClient(max_retries=15, backoff_factor=1))
+                  api_client=APIClient(max_retries=15, backoff_factor=1))
 
     # Example showing how to get all organizations in a group
     group.orgs = group.get_orgs()

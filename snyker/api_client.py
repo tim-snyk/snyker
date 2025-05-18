@@ -162,7 +162,7 @@ class APIClient:
 
 # Example Usage:
 if __name__ == "__main__":
-    api_client = SnykApiClient(max_retries=15, backoff_factor=1)
+    api_client = APIClient(max_retries=15, backoff_factor=1)
     try:
         uri = f"/rest/openapi"
         headers = {
