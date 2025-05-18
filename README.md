@@ -1,4 +1,4 @@
-# snyk-tools
+# snyker
 
 
 **Required Environment Variables:**
