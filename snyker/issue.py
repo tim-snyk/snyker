@@ -1,5 +1,4 @@
-from utils import get_nested_value # Helper function to safely retrieve nested values
-import types
+from snyker.utils import get_nested_value # Helper function to safely retrieve nested values
 
 class Issue:
     def __init__(self, issue_data: dict, group=None, org=None, project=None, api_client=None):
