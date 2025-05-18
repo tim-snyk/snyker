@@ -1,5 +1,6 @@
 # snyker
 
+DISCLAIMER: This is just a personal project and not officially covered by support nor directly endorsed by Snyk.
 
 **Required Environment Variables:**
 
