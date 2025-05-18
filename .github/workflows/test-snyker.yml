@@ -1,0 +1,65 @@
+# .github/workflows/test-snyker.yml
+
+name: Snyker Applicatication Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read # Default permission, sufficient for checkout and running tests
+
+jobs:
+  build_and_test: # Renamed job for clarity
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # You can test against multiple Python versions if desired
+        # For now, sticking to a recent one similar to your original.
+        python-version: ["3.11"] # Using a widely available recent version, adjust if 3.13 is critical
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5 # Updated to latest major version
+        with:
+          python-version: ${{ matrix.python-version }}
+          # Optional: Caching pip dependencies (uv has its own caching too)
+          # cache: 'pip'
+
+      - name: Install uv (Python package installer and resolver)
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          # Add uv to PATH for subsequent steps
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          # Verify installation
+          uv --version
+
+      - name: Install project dependencies (including test tools)
+        run: |
+          # Install the current package and its dependencies,
+          # including optional dependencies defined in a 'test' extra.
+          # Assumes pytest and flake8 are listed in pyproject.toml under [project.optional-dependencies.test]
+          uv pip install .[test]
+          # If pytest and flake8 are not in pyproject.toml's test extras,
+          # you would install them explicitly:
+          # uv pip install pytest flake8
+          # uv pip install . # To install the package itself
+
+      - name: Lint with flake8 (Syntax and Undefined Names - Hard Fail)
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          uv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Lint with flake8 (Style and Complexity - Warnings)
+        run: |
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          uv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Test with pytest
+        run: |
+          uv run pytest
