@@ -1,39 +1,41 @@
-# macOS specific
-.DS_Store
+# Build artifacts
+dist/
+build/
+*.egg-info/
+snyker.egg-info/ # Specific to your structure
+*.egg
+wheels/
+sdist/
 
-# IDE configuration
-# JetBrains IDEs (like PyCharm, IntelliJ IDEA)
-.idea/
+# Python bytecode and cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Python virtual environment
-# Common names for virtual environments
+# Virtual environments - ensure your specific venv name isn't committed
 .venv/
 venv/
 env/
 ENV/
-*.venv
+pip-wheel-metadata/
 
-# Python specific
-__pycache__/
-*.py[cod]
-*$py.class
+# Test and coverage output
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
 
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
-wheels/
-*.egg
+# Mypy cache
+.mypy_cache/
+.dmypy.json
+dmypy.json
 
-# Lock files from specific package managers (uv.lock seems to be from 'uv' package manager)
-# If uv.lock IS intended to be shared (like poetry.lock or Pipfile.lock), then REMOVE this line.
-# Typically, lock files for applications are committed, for libraries they might not be.
-# Given 'uv' is a newer tool, confirm its best practices for uv.lock.
-# For now, I'll assume it might be like a poetry.lock and should be committed,
-# so I will comment it out. If you want to ignore it, uncomment the line below.
-# uv.lock
+# Logs
+*.log
 
-# If you have other specific log files or temporary files, add them here.
-# For example:
-# *.log
-# tmp/
+# OS-specific files
+.DS_Store
+Thumbs.db
