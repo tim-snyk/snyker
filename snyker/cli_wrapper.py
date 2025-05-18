@@ -111,7 +111,7 @@ class CLIWrapper:
                 }
             }
         }
-        assets = group.get_assets(query=query)
+        assets = self.group.get_assets(query=query)
         for asset in assets:
             if asset.browse_url == repository_url: # Matching asset against the full URL as provided
                 if len(asset.organizations) == 0:
@@ -129,8 +129,7 @@ class CLIWrapper:
 
 if __name__ == "__main__":
     # Example usage
-
-    snyk_cli = SnykCliWrapper()  # Instantiate the SnykCliWrapper class
+    snyk_cli = CLIWrapper()  # Instantiate the CLIWrapper class
     snyk_cli.version_check()  # Check Snyk CLI version
     snyk_cli.changeDirectory(snyk_cli.project_directory)  # Change to your git repo directory
 
