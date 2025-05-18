@@ -60,6 +60,20 @@ jobs:
           # If .[test] handles it, you can remove the line below.
           uv pip install . # To install the package itself
 
+      - name: Debug Information Before Linting
+        run: |
+          echo "Current working directory:"
+          pwd
+          echo "Listing root directory contents:"
+          ls -la
+          echo "Listing snyker/ directory contents:"
+          ls -la snyker/
+          echo "Verifying snyker/snyker/ directory existence and contents:"
+          ls -la snyker/snyker/ || echo "Directory <repo_root>/snyker/snyker/ NOT FOUND"
+          echo "Flake8 version:"
+          uv run flake8 --version
+
+
       - name: Lint with flake8 (Syntax and Undefined Names - Hard Fail)
         run: |
           # stop the build if there are Python syntax errors or undefined names
