@@ -90,7 +90,7 @@ class Project:
         uri = f"/rest/orgs/{self.organization.id}/issues"
         headers = {
             'Content-Type': 'application/vnd.api+json',
-            'Authorization': f'{token}'
+            'Authorization': f'{self.api_client.token}',
         }
         params = {
             'version': apiVersion,
