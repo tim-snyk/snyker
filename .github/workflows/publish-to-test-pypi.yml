@@ -5,7 +5,7 @@ name: Publish Python Package to TestPyPI
 on:
   push:
     branches:
-      - main # Or your default branch, e.g., master
+      - staging # Or your default branch, e.g., master
 
 jobs:
   build-and-publish-to-testpypi:
