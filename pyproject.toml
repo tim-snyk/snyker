@@ -8,9 +8,9 @@ version = "0.1.0"          # Replace with your package's version
 authors = [
     { name = "Tim Gowan", email = "tim.gowan@snyk.io" },
 ]
-description = "A short description of my awesome package."
+description = "Collection of utilities leveraging the Snyk API and a wrapper for the Snyk CLI"
 readme = "README.md"
-license = { file = "LICENSE" } # Or specify license text
+license = "Apache-2.0" # Or specify license text
 requires-python = ">=3.8" # Specify the Python versions your package supports
 classifiers = [
     "Development Status :: 3 - Alpha",
