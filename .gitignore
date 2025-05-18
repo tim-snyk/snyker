@@ -1,0 +1,39 @@
+# macOS specific
+.DS_Store
+
+# IDE configuration
+# JetBrains IDEs (like PyCharm, IntelliJ IDEA)
+.idea/
+
+# Python virtual environment
+# Common names for virtual environments
+.venv/
+venv/
+env/
+ENV/
+*.venv
+
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+wheels/
+*.egg
+
+# Lock files from specific package managers (uv.lock seems to be from 'uv' package manager)
+# If uv.lock IS intended to be shared (like poetry.lock or Pipfile.lock), then REMOVE this line.
+# Typically, lock files for applications are committed, for libraries they might not be.
+# Given 'uv' is a newer tool, confirm its best practices for uv.lock.
+# For now, I'll assume it might be like a poetry.lock and should be committed,
+# so I will comment it out. If you want to ignore it, uncomment the line below.
+# uv.lock
+
+# If you have other specific log files or temporary files, add them here.
+# For example:
+# *.log
+# tmp/
