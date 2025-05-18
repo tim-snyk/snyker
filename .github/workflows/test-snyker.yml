@@ -60,31 +60,17 @@ jobs:
           # If .[test] handles it, you can remove the line below.
           uv pip install . # To install the package itself
 
-      - name: Debug Information Before Linting
-        run: |
-          echo "Current working directory:"
-          pwd
-          echo "Listing root directory contents:"
-          ls -la
-          echo "Listing snyker/ directory contents:"
-          ls -la snyker/
-          echo "Verifying snyker/snyker/ directory existence and contents:"
-          ls -la snyker/snyker/ || echo "Directory <repo_root>/snyker/snyker/ NOT FOUND"
-          echo "Flake8 version:"
-          uv run flake8 --version
-
-
       - name: Lint with flake8 (Syntax and Undefined Names - Hard Fail)
         run: |
           # stop the build if there are Python syntax errors or undefined names
           # Modified to lint only the snyker/snyker directory
-          uv run flake8 /snyker --count --select=E9,F63,F7,F82 --show-source --statistics
+          uv run flake8 snyker --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Lint with flake8 (Style and Complexity - Warnings)
         run: |
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           # Modified to lint only the snyker/snyker directory
-          uv run flake8 snyker/snyker --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          uv run flake8 snyker --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Test with pytest
         run: |
