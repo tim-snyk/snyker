@@ -6,20 +6,13 @@ import time
 from urllib.parse import quote
 import traceback
 import threading
-import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-token = os.getenv('SNYK_TOKEN')  # Set your API token as an environment variable
 apiVersion = "2024-10-15"  # Set the API version.
-delay = 15 # Delay between retries for polling
-max_delay = 120 # Maximum delay for polling
 
 # TODO: Replace with your URLs
 originUrls = {
     'github': 'https://github.com',
-    'github-enterprise': 'https://github.com', # May need to be updated to use the enterprise URL
+    'github-enterprise': 'https://github.com',  # May need to be updated to use the enterprise URL
     'gitlab': 'https://gitlab.com',
     'bitbucket-server': 'https://bitbucket.org',  # May need to be updated to use the enterprise URL
     'bitbucket-cloud': 'https://bitbucket.org',
@@ -27,6 +20,7 @@ originUrls = {
     'azure-repos': 'https://dev.azure.com',
     'bitbucket-connect-app': 'https://bitbucket.org'
 }
+
 
 class Project:
     def __init__(self, project_id, organization, group=None):
@@ -55,7 +49,7 @@ class Project:
             traceback.print_exc()
             exit(1)
 
-    def getIntegrationId(self):
+    def getIntegrationId(self) -> str:
         '''
         Helper function to get the integration ID from the project name and enumerated dictionary.
         '''
@@ -68,7 +62,7 @@ class Project:
                 return self.organization.integrations[key]
         return None
 
-    def getProject(self, params:dict = {}):
+    def getProject(self, params: dict = {}):
         '''
         # GET /rest/orgs/{orgId}/projects/{projectId}?version={apiVersion}
         '''
@@ -101,8 +95,8 @@ class Project:
         params = {
             'version': apiVersion,
             'limit': 100,
-            'scan_item.id': None,               # 'projectId'
-            'scan_item.type': None,             # 'project'
+            'scan_item.id': None,  # 'projectId'
+            'scan_item.type': None,  # 'project'
             'status': status,
             'type': scanType,
             'created_after': created_after,
@@ -152,7 +146,7 @@ class Project:
         }
         headers = {
             'Content-Type': 'application/vnd.api+json',
-            'Authorization': f'{token}'
+            'Authorization': f'{self.api_client.token}',
         }
         inProgressDisplayedFlag = False
         try:
@@ -166,11 +160,11 @@ class Project:
                     break
                 except requests.exceptions.HTTPError as err:
                     if response.status_code == 429:  # Too Many Requests
-                        print(f"Rate limit exceeded, retrying in {localDelay} seconds...")
+                        self.logger.debug(f"Rate limit exceeded, retrying in {localDelay} seconds...")
                         time.sleep(localDelay)
-                        localDelay = min(localDelay * 2, max_delay)  # Exponential backoff with a maximum delay
+                        localDelay = min(localDelay * 2, 500)  # Exponential backoff with a maximum delay
                     else:
-                        print(f"An unexpected error occurred: {err}{response.text}")
+                        self.logger.error(f"An unexpected error occurred: {err}{response.text}")
                         raise err
             if response.status_code == 201:
                 while True:
@@ -184,7 +178,7 @@ class Project:
                         while response.status_code in [200, 429] and response.json()['data']['attributes'][
                             'state'] == 'in_progress':
                             if response.status_code == 429:
-                                print(f"Rate limit exceeded, retrying in {localDelay} seconds...")
+                                self.logger.debug(f"Rate limit exceeded, retrying in {localDelay} seconds...")
                                 time.sleep(localDelay)
                                 continue
                             response = requests.get(
@@ -195,11 +189,12 @@ class Project:
                             state = response.json()['data']['attributes']['state']
                             # Only want to show this once.
                             if inProgressDisplayedFlag == False:
-                                print(f"    SARIF generation {state}: {self.repoUrl}")
+                                self.logger.debug(f"    SARIF generation {state}: {self.repoUrl}")
                                 # Uncomment to make stdout less noisy with polling
                                 inProgressDisplayedFlag = True
                             if state == 'completed':
                                 print(f"    SARIF generation {state}: {self.repoUrl}")
+                                self.logger.debug(f"    SARIF generation {state}: {self.repoUrl}")
                                 # Different API, don't need to share rate limit
                                 # print(response.json()['data']['attributes']['findings'][0]['findings_url'])
                                 response = requests.get(
@@ -214,7 +209,7 @@ class Project:
                         if response.status_code == 429:  # Too Many Requests
                             print(f"Rate limit exceeded, retrying in {localDelay} seconds...")
                             time.sleep(localDelay)
-                            localDelay = min(localDelay * 2, max_delay)  # Exponential backoff with a maximum delay
+                            localDelay = min(localDelay * 2, 500)  # Exponential backoff with a maximum delay
                         else:
                             raise err
 
@@ -235,13 +230,14 @@ class Project:
         uri = f"/v1/org/{self.organization.id}/project/{self.id}/ignores"
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': f'token {token}'
+            'Authorization': f'token {self.api_client.token}'
         }
         ignores = []
         try:
-            response = requests.get(uri,
-                                    headers=headers)
-            response.raise_for_status()
+            response = self.api_client.get(
+                uri,
+                headers=headers
+            )
         except requests.exceptions.RequestException as e:
             print(f"An unexpected error occurred: {e}")
             print(f"Request URL: {uri}")

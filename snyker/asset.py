@@ -1,6 +1,8 @@
+from __future__ import annotations
 from urllib.parse import urlparse
-import logging
-import json
+from typing import TYPE_CHECKING, List, Dict, Optional
+if TYPE_CHECKING:
+    from .project import Project
 
 api_version = "2024-10-15"  # Set the API version.
 
@@ -42,7 +44,7 @@ class Asset:
             self.app_catalog_name = app_context.get('catalog_name')
             self.app_category = app_context.get('category')
             self.app_lifecycle = app_context.get('lifecycle')
-            self.app_owner= app_context.get('owner')
+            self.app_owner = app_context.get('owner')
             self.app_source = app_context.get('source')
             self.app_title = app_context.get('title')
 
@@ -61,7 +63,7 @@ class Asset:
             self.image_registries = asset['attributes'].get('image_registries')
             self.image_repositories = asset['attributes'].get('image_repositories')
 
-    def githubNameAndOwnerFromUrl(self) -> tuple['github_name', 'github_owner']:
+    def githubNameAndOwnerFromUrl(self) -> tuple[str, str]:
         """ Helper function to extract the GitHub name and owner from the browser URL."""
         if not self.browse_url:
             self.logger.warning(f"No browser URL found for asset {self.id}. Cannot extract GitHub Name.")
@@ -73,7 +75,7 @@ class Asset:
         github_owner = path_segments[0]
         return github_name, github_owner
 
-    def get_projects(self, params: dict = {}) -> list['Project']:
+    def get_projects(self, params: dict = {}) -> list[Project]:
         from project import Project
         from organization import Organization
         if 'snyk' not in self.sources:
