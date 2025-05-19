@@ -1,22 +1,24 @@
-import traceback
-import requests
 from __future__ import annotations
 from typing import TYPE_CHECKING, List  # For Python < 3.9 for list[], use List[]
-
 if TYPE_CHECKING:
-    from .asset import Asset
-    from .organization import Organization
-    from .issue import Issue
+    from snyker import APIClient, Group, Asset, Project, Organization, Issue
+import traceback
+
 
 api_version = "2024-10-15"  # Set the API version.
 
 # This class is used to represent a target in Snyk.
-class Project:
-    def __init__(self, organization, project_id):
+class Target:
+    def __init__(self,
+                 target_id: str,
+                 organization: Organization,
+                 group: Group = None,
+                 api_client: APIClient = None,
+                 params: dict = {}):
         self.organization = organization
-        self.group = organization.group
-        self.APIClient = organization.group.api_client
-        self.logger = self.APIClient.logger
+        self.group = Group() if group is None else group
+        self.api_client = self.group.api_client if api_client is None else api_client
+        self.logger = self.api_client.logger
         self.id = project_id
         # Getting project details because listProjectsInOrg does not provide enough metadata
         project = self.getProject()

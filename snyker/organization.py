@@ -1,32 +1,37 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Dict, Optional
-
 if TYPE_CHECKING:
+    from .group import Group
+    from .api_client import APIClient
+    from .project import Project
     from .issue import Issue
 import os
-from snyker.group import Group
+from snyker import APIClient, Group, Issue
 
 token = os.getenv('SNYK_TOKEN')  # Set your API token as an environment variable
 apiVersion = "2024-10-15"  # Set the API version.
 
 class Organization:
-    def __init__(self, org_id, group=None, api_client=None, params: dict = {}):
-        if group is None:
-            self.group = Group()
-        if api_client is None:
-            self.api_client = group.api_client
-        self.logger = self.api_client.logger
+    def __init__(self,
+                 org_id: str,
+                 group: Optional['Group'] = None,
+                 api_client: Optional['APIClient'] = None,
+                 params: dict = {}):
         self.id = org_id
-        self.raw = self.getOrg(params=params)
+        self.group = Group() if group is None else group
+        self.api_client = self.group.api_client if api_client is None else api_client
+        self.logger = self.api_client.logger
+        self.raw = self.get_org(params=params)
         self.integrations = None
+
         # Attribute helpers
         self.group_id = self.raw['data']['attributes']['group_id']
         self.name = self.raw['data']['attributes']['name']
         self.slug = self.raw['data']['attributes']['slug']
+        self.logger.info(f"[Org ID: {self.id}].__init__ created organization object for {self.name} ")
 
 
     def get_issues(self, params: dict = {}) -> list[Issue]:
-        from issue import Issue
         '''
         # GET /rest/orgs/{orgId}/issues
         '''
@@ -35,7 +40,7 @@ class Organization:
             'Content-Type': 'application/json',
             'Authorization': f'{token}'
         }
-        params = {
+        current_params = {
             'version': apiVersion,
             'limit': 100,
             'scan_item.id': None,               # 'projectId'
@@ -49,24 +54,27 @@ class Organization:
             'status': None,                     # 'open', 'resolved'
             'ignored': None,                    # bool
         }
-        params.update(params)
+        current_params.update(params)
         response = self.api_client.get(
             uri,
             headers=headers,
-            params=params
+            params=current_params
         )
-        issues = response.json()['data']
-        while response.status_code == 200 and 'data' in response.json():
+        issues = []
+        while response.status_code in [200, 429] and 'data' in response.json():
             for issue in response.json()['data']:
-                issues.extend(issue)
-            uri = response.json()["links"].get("next") if "links" in response.json() else None
+                issues.append(Issue(issue_data=issue, group=self))
+            uri = response.json()["links"].get("next") if "next" in response.json()['links'] else None
             if uri:
                 response = self.api_client.get(uri, headers=headers)
             else:
                 break
+        self.issues = issues
+        self.logger.info(f"[Org: {self.id}].get_issues found {len(issues)} issues with params:"
+                         f"{dict(params)}")
         return issues
 
-    def getOrg(self, params: dict = {}):
+    def get_org(self, params: dict = {}) -> dict:
         '''
         # GET /rest/orgs/{orgId}?version={apiVersion}
         '''
@@ -115,3 +123,40 @@ class Organization:
                 break
         self.integrations = integrations
         return integrations
+
+    def get_projects(self, params: dict = {}) -> List['Projects']:
+        '''
+        # GET /rest/orgs/{orgId}/projects?version={apiVersion}
+        '''
+        from snyker.project import Project
+        uri = f"/rest/orgs/{self.id}/projects"
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'{self.api_client.token}'
+        }
+        current_params = {
+            'version': apiVersion,
+            'limit': 100,
+            'name': None,  # Only return projects whose name contains this value.
+            'type': None,  # Only return projects of this type.
+            'expand': None,  # 'all', 'issues', 'dependencies'
+        }
+        current_params.update(params)
+        response = self.api_client.get(
+            uri,
+            headers=headers,
+            params=current_params
+        )
+        projects = []
+        while response.status_code == 200 and 'data' in response.json():
+            for project in response.json()['data']:
+                projects.append(Project(project['id'], organization=self, group=self.group))
+            uri = response.json()["links"].get("next") if "next" in response.json()['links'] else None
+            if uri:
+                response = self.api_client.get(uri, headers=headers)
+            else:
+                break
+        self.projects = projects
+        self.logger.info(f"[Org: {self.id}].get_projects found {len(self.projects)} projects with params:"
+                         f"{dict(current_params)}")
+        return projects

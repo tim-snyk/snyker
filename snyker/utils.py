@@ -18,3 +18,22 @@ def get_nested_value(data, keys, default=None):
     return current
 
 
+def search_json(json_obj, search_string):
+    """
+    Searches for a string in a JSON object (dict or list) across all levels against the key names and values.
+    :param json_obj:
+    :param search_string:
+    :return:
+    """
+    if isinstance(json_obj, dict):
+        for key, value in json_obj.items():
+            if search_json(value, search_string):
+                return True
+    elif isinstance(json_obj, list):
+        for item in json_obj:
+            if search_json(item, search_string):
+                return True
+    elif isinstance(json_obj, str):
+        if search_string in json_obj:
+            return True
+    return False

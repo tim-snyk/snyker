@@ -1,9 +1,12 @@
+from __future__ import annotations
 import requests
 import json
 import time
 import traceback
-from . import Organization
-from . import Group
+from typing import TYPE_CHECKING, List, Dict, Optional
+if TYPE_CHECKING:
+    from snyker import APIClient, Group, Asset, Organization, Issue
+from snyker import Issue, Organization
 
 apiVersion = "2024-10-15"  # Set the API version.
 
@@ -22,18 +25,18 @@ originUrls = {
 
 class Project:
     def __init__(self, project_id: str,
-                 organization: Organization,
-                 group: Group = None,
+                 organization: 'Organization',
+                 group: Optional['Group'] = None,
+                 api_client: Optional['APIClient'] = None,
                  params: dict = {}):
-        if group is None:
-            self.group = Group()
-        self.organization = organization
-        self.group = group
-        self.api_client = self.group.api_client
-        self.logger = self.api_client.logger
+
         self.id = project_id
+        self.organization = organization
+        self.group = Group() if group is None else group
+        self.api_client = self.group.api_client if api_client is None else api_client
+        self.logger = self.api_client.logger
         # Getting project details because listProjectsInOrg does not provide enough metadata
-        self.raw = self.getProject(params=params)
+        self.raw = self.get_project(params=params)
         self.issues = None
         self.sarif = None
 
@@ -52,7 +55,7 @@ class Project:
             traceback.print_exc()
             exit(1)
 
-    def getIntegrationId(self) -> str:
+    def get_integration_ids(self) -> str:
         '''
         Helper function to get the integration ID from the project name and enumerated dictionary.
         '''
@@ -65,7 +68,7 @@ class Project:
                 return self.organization.integrations[key]
         return None
 
-    def getProject(self, params: dict = {}):
+    def get_project(self, params: dict = {}):
         '''
         # GET /rest/orgs/{orgId}/projects/{projectId}?version={apiVersion}
         '''
@@ -85,47 +88,21 @@ class Project:
         )
         return response.json()
 
-    def getProjectIssues(self, scanType=None, status=None, include_ignored=None, created_after=None,
-                         created_before=None, params: dict = {}):
-        from issue import Issue
-        '''
-        # GET /rest/orgs/{orgId}/issues?version={apiVersion}
-        '''
-        uri = f"/rest/orgs/{self.organization.id}/issues"
-        headers = {
-            'Content-Type': 'application/vnd.api+json',
-            'Authorization': f'{self.api_client.token}',
-        }
+    def get_issues(self, params: dict = {}):
+        """
+        Inherits from Organization but enforces the project ID and type
+        :param params:
+        :return:
+        """
         params = {
             'version': apiVersion,
             'limit': 100,
-            'scan_item.id': None,  # 'projectId'
-            'scan_item.type': None,  # 'project'
-            'status': status,
-            'type': scanType,
-            'created_after': created_after,
-            'created_before': created_before,
-            'ignored': include_ignored
+            'scan_item.id': self.id,
+            'scan_item.type': 'project',
         }
-        response = self.api_client.get(
-            uri,
-            headers=headers,
-            params=params
-        )
-        issues = []
-        while response.status_code in [200, 429]:
-            response_json = response.json()
-            if "data" in response_json:
-                for issue in response_json['data']:
-                    # Uncomment print statement to debug
-                    issues.append(Issue(issue))
-            uri = response_json["links"].get("next") if "links" in response_json else None
-            if uri:
-                response = self.api_client.get(uri, headers=headers)
-            else:
-                break
-        self.issues = issues
-        return issues
+        params.update(params)
+        self.issues = self.organization.get_issues(params=params)
+        return self.issues
 
     def testApi(self, continuous_monitor=False):
         '''
