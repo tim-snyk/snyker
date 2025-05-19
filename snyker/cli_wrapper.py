@@ -12,7 +12,7 @@ import os
 import subprocess
 import traceback
 import json
-import logging
+
 
 class CLIWrapper:
     def __init__(self):
@@ -32,7 +32,7 @@ class CLIWrapper:
         if directory:
             os.chdir(directory)
             self.logger.info(f"[CLI].change_directory: {directory}")
-        elif self.project_directory is None:
+        elif self.project_directory is not None:
             os.chdir(self.project_directory)
             self.logger.info(f"[CLI].change_directory: {directory}")
         else:
@@ -80,13 +80,13 @@ class CLIWrapper:
                         command.append(f'{key}')
                     else:
                         command.append(f'{key}={value}')
-            self.logger.info(f"[CLI] Command: {' '.join(command)}")
+            self.logger.info(f"[CLI].run Command: {' '.join(command)}")
             result = subprocess.run(command, capture_output=True, text=True)
             # Debug run command by examining the output
             # Print output stream until subprocess returns
             self.logger.debug(f"[CLI].run stdout: {result.stdout}")
             if result.stdout:
-                self.logger.info(f"[CLI].run {result.returncode} return code")
+                self.logger.info(f"[CLI].run: returned code {result.returncode} ")
             if result.stderr:
                 self.logger.warning(result.stderr)
             else:
@@ -147,7 +147,8 @@ class CLIWrapper:
                                  f"{asset.organizations[0].id}")
                 break
             else:
-                self.logger.warning(f"[CLI].find_org_id_from_assets {repository_url} not associated with any organization.")
+                self.logger.warning(
+                    f"[CLI].find_org_id_from_assets {repository_url} not associated with any organization.")
         return org_id if org_id is not None else None
 
     def get_business_criticality_from_asset(self, asset: Asset = None):
@@ -169,18 +170,18 @@ class CLIWrapper:
         elif asset.app_lifecycle is None:
             self.logger.warning(f"[CLI].get_lifecycle_from_asset No lifecycle found for asset {asset.id}.")
         else:
-            self.logger.warning(f"[CLI].get_lifecycle_from_asset asset.app_lifecycle definition is incompatible for asset "
-                           f"{asset.id}. Defaulting to 'Development'")
+            self.logger.warning(
+                f"[CLI].get_lifecycle_from_asset asset.app_lifecycle definition is incompatible for asset "
+                f"{asset.id}. Defaulting to 'Development'")
             return 'Development'
+
 
 if __name__ == "__main__":
     # Example usage
     snyk_cli = CLIWrapper()  # Instantiate the CLIWrapper class
     snyk_cli.flight_check(minimum_version='1.1295.4')  # Check Snyk CLI presence and version
 
-
-
-    snyk_cli.changeDirectory(snyk_cli.project_directory)  # Change to your git repo directory
+    snyk_cli.change_directory(snyk_cli.project_directory)  # Change to your git repo directory
     # Get the orgId from the asset
     repository_url = 'https://github.com/tim-snyk/vulnado'
     assets = snyk_cli.find_assets_from_repository_url(repository_url)  # Find the asset(s) from the repository URL
@@ -212,6 +213,6 @@ if __name__ == "__main__":
     while len(playbook) > 0:
         task = playbook.pop(0)
         snyk_cli.run(task)  # Run the task with the Snyk CLI
-    snyk_cli.changeDirectory('/Users/timgowan/git/juice-shop')  # Change to a specific git repo directory
+    snyk_cli.change_directory('/Users/timgowan/git/juice-shop')  # Change to a specific git repo directory
     result = snyk_cli.run(param_str=f'snyk code test --org={org_id} --json')
     result = json.loads(result.stdout)  # Parse the JSON output

@@ -6,7 +6,7 @@ import traceback
 from typing import TYPE_CHECKING, List, Dict, Optional
 if TYPE_CHECKING:
     from snyker import APIClient, Group, Asset, Organization, Issue
-from snyker import Issue, Organization
+
 
 apiVersion = "2024-10-15"  # Set the API version.
 
@@ -88,11 +88,11 @@ class Project:
         )
         return response.json()
 
-    def get_issues(self, params: dict = {}):
+    def get_issues(self, params: dict = {}) -> List[Issue]:
         """
         Inherits from Organization but enforces the project ID and type
         :param params:
-        :return:
+        :return: List[Issues]
         """
         params = {
             'version': apiVersion,

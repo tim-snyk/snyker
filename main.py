@@ -6,7 +6,10 @@ def main():
     First, set your SNYK_TOKEN envar with a Group-Scoped Service Account Token. This allows you to run this script
     without needing to specify a group_id like shown below with print(Group().id)
     '''
-    print(Group().id)
+    group = Group(api_client=APIClient(
+        max_retries=15,  # Number of retries when hitting rate limits
+        backoff_factor=0.5,  # Backoff factor for retries
+        logging_level=20))  # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
 
     '''
     Every object with an API associated with it will either have an APIClient object built for them with default values,
@@ -15,11 +18,6 @@ def main():
     The APIClient object is responsible for making the API calls and handling rate limits as well as logging events
     at multiple levels. Next to be supported is multithreading and async calls.
     '''
-    # group = Group(group_id='your_group_id')  # Uncomment this line to specify a group ID
-    group = Group(api_client=APIClient(
-        max_retries=15,  # Number of retries when hitting rate limits
-        backoff_factor=0.5,  # Backoff factor for retries
-        logging_level=20))  # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
 
     group.get_orgs()
     issues = []
@@ -28,7 +26,7 @@ def main():
         for project in org.projects:
             issues += project.get_issues()
     print(len(issues))
-    exit(0)
+
     '''
     Example showing how to get all organizations in a group. Calling a get_ method on objects will both return the 
     list of objects as well set the objects attribute on the object itself.
@@ -42,11 +40,18 @@ def main():
     https://apidocs.snyk.io/#get-/groups/-group_id-/issues
     '''
 
-    group.issues = group.get_issues(params={
-        "type": "code",  # Type of project in Snyk
-        "status": "resolved",  # Status filter of the issues to return
-        "ignored": False  # Filter to include ignored issues
-    })
+    group.issues = group.get_issues(
+        params={
+            "type": "code",  # Type of project in Snyk
+            "status": "resolved",  # Status filter of the issues to return
+            "ignored": False  # Filter to include ignored issues
+        })
+    group.issues = group.get_issues(
+        params=dict(
+            type="code",
+            status="resolved",
+            ignored=False
+        ))
 
     '''
     Example in accessing a sub-entity like Assets, we can get all assets in a group which are returned as a list of 
@@ -108,8 +113,15 @@ def main():
     Some entities are able to call a singular get_ for the object. For example, the Group object has a get_asset()
     method after being provided an asset_id. This will return a single Asset object that is NOT set in the class.
     '''
-    asset = group.get_asset(assets[0].id)                  # get_asset by Asset object's .id
+    asset = group.get_asset(assets[0].id)  # get_asset by Asset object's .id
+    print(json.dumps(asset.raw, indent=4))  # Print the raw asset data
     # asset = group.get_asset('<your_asset_id>')           # get_asset by string
+
+    #  Ask user to press enter to exit, then exit when they do
+    print("Press Enter to exit...")
+    input()
+    group.api_client.close()
+    exit(0)
 
 
 if __name__ == "__main__":
