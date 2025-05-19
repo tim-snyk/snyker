@@ -1,47 +1,77 @@
 from __future__ import annotations
-
-import json
-from snyker import APIClient
-from typing import TYPE_CHECKING, List
-
+from typing import TYPE_CHECKING, List, Dict, Optional
 if TYPE_CHECKING:
-    from .asset import Asset
-    from .organization import Organization
-    from .issue import Issue
+    from snyker import APIClient, Organization, Asset, Project, Issue
+from snyker import APIClient
+import json
 
 api_version = "2024-10-15"  # Set the API version.
 
 class Group:
-    def __init__(self, group_id=None, api_client: APIClient = None, params: dict = {}):
-        if api_client is None:
-            self.api_client = APIClient(max_retries=15, backoff_factor=1, logging_level=20)
-        else:
-            self.api_client = api_client
+    def __init__(self,
+                 group_id:str = None,
+                 api_client: Optional['APIClient'] = None,
+                 params: dict = {}):
+        self.api_client = APIClient(max_retries=15,
+                                    backoff_factor=1,
+                                    logging_level=20) if api_client is None else api_client
         self.logger = self.api_client.logger
         if group_id is None:
-            response = self.api_client.get(
-                "/rest/groups",
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'{self.api_client.token}'
-                },
-                params={
-                    'version': api_version,
-                    'limit': 100
-                }
-            ).json()
-            if len(response['data']) == 1:
-                self.id = response['data'][0]['id']
+            response = self.get_groups()
+            if len(response) == 1:
+                self.raw = response[0]
             else:
                 self.logger.error("Multiple groups found. Please specify a group_id or use a Service Account Token.")
                 raise ValueError("Multiple groups found. Please specify group_id or use a Service Account Token.")
         else:
-            self.id = group_id
-
+            self.raw = self.get_group(group_id)
+        self.id = self.raw['id']
+        self.name = self.raw['attributes']['name']
         self.orgs = None
         self.assets = None
         self.issues = None
-        self.logger.info(f"[Group ID: {self.id}].__init__ created group object")
+        self.logger.info(f"[Group ID: {self.id}].__init__ created group object for {self.name}")
+
+    def get_group(self, params: dict = {}) -> dict:
+        '''
+        # GET /rest/groups/{groupId}?version={apiVersion}
+        '''
+        uri = f"/rest/groups/{self.id}"
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'{self.api_client.token}'
+        }
+        current_params = {
+            'version': api_version,
+            'limit': 100
+        }
+        current_params.update(params)
+        response = self.api_client.get(
+            uri,
+            headers=headers,
+            params=current_params
+        )
+        return response.json()['data']
+
+    def get_groups(self, params: dict = {}) -> [dict]:
+        '''
+        # GET /rest/groups/{groupId}?version={apiVersion}
+        '''
+        uri = f"/rest/groups/"
+        response = self.api_client.get(
+            "/rest/groups",
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'{self.api_client.token}'
+            },
+            params={
+                'version': api_version,
+                'limit': 100
+            }
+        ).json()
+        if len(response['data']) == 1:
+            self.id = response['data'][0]['id']
+        return response['data']
 
     def get_asset(self, asset_id, params: dict = {}) -> Asset:
         from snyker.asset import Asset
@@ -63,8 +93,9 @@ class Group:
             headers=headers,
             params=params
         )
-        asset = response.json()['data']
-        return Asset(asset, self)
+        asset = Asset(response.json()['data'], self)
+        self.logger.info(f"[Group ID: {self.id}].get_asset found asset {asset.id}")
+        return
 
     def get_assets(self, query: dict, params: dict = {}) -> list[Asset]:
         from snyker.asset import Asset
@@ -151,18 +182,18 @@ class Group:
             'Content-Type': 'application/json',
             'Authorization': f'{self.api_client.token}'
         }
-        default = {
+        current_params = {
             'version': api_version,
             'limit': 100,
         }
-        params.update(default)
+        current_params.update(params)
         response = self.api_client.get(
             uri,
             headers=headers,
-            params=params
+            params=current_params
         )
         issues = []
-        while response.status_code == 200 and 'data' in response.json():
+        while response.status_code in [200, 429] and 'data' in response.json():
             for issue in response.json()['data']:
                 issues.append(Issue(issue_data=issue, group=self))
             uri = response.json()["links"].get("next") if "next" in response.json()['links'] else None
@@ -171,6 +202,6 @@ class Group:
             else:
                 break
         self.issues = issues
-        self.logger.info(f"[Group ID: {self.id}].get_issues found {len(issues)} issues")
+        self.logger.info(f"[Group: {self.id}].get_issues found {len(self.issues)} issues params:{dict(params)}")
         return issues
 

@@ -4,21 +4,31 @@ from snyker import Group, APIClient
 def main():
     '''
     First, set your SNYK_TOKEN envar with a Group-Scoped Service Account Token. This allows you to run this script
-    without needing to specify a group_id like shown below with Group().
+    without needing to specify a group_id like shown below with print(Group().id)
+    '''
+    print(Group().id)
 
+    '''
     Every object with an API associated with it will either have an APIClient object built for them with default values,
     inherited one from a parent caller object or can be explicitly provided one.
 
-    The APIClient object is responsible for making the API calls and handling rate limits as well as logging activities
-    at multiple levels.
+    The APIClient object is responsible for making the API calls and handling rate limits as well as logging events
+    at multiple levels. Next to be supported is multithreading and async calls.
     '''
-    print(Group().id)
     # group = Group(group_id='your_group_id')  # Uncomment this line to specify a group ID
     group = Group(api_client=APIClient(
         max_retries=15,  # Number of retries when hitting rate limits
         backoff_factor=0.5,  # Backoff factor for retries
-        logging_level=60))  # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
+        logging_level=20))  # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
 
+    group.get_orgs()
+    issues = []
+    for org in group.orgs:
+        org.get_projects()
+        for project in org.projects:
+            issues += project.get_issues()
+    print(len(issues))
+    exit(0)
     '''
     Example showing how to get all organizations in a group. Calling a get_ method on objects will both return the 
     list of objects as well set the objects attribute on the object itself.
@@ -76,25 +86,24 @@ def main():
         }
     }
     assets = group.get_assets(query=test_query)
-    if assets == group.assets:
-        print(f"Matching sets of assets. Total Assets: {len(assets)}, Total Assets in Group: {len(group.assets)}")
 
     '''
-    A few more things to call out. First is that returned objects also have a raw attribute which contains the raw JSON 
-    data returned from the API. This is useful for debugging and understanding the data schema returned.
-    
-    Second is that there are useful links out of the Asset object to get the projects (from which Issue objects can
-    be created) as well as which Organizations an Asset receives project data from. These related entities must
-    be called explicitly and are not returned by default. This is because the API can return a large number of items
-    and we want to avoid overwhelming the user with data.
-    
+    Returned objects also have a raw attribute which contains the raw JSON data returned from the API. This is useful 
+    for debugging and understanding the data schema returned.
     '''
     import json
     print(json.dumps(assets[0].raw, indent=4))
+    '''
+    Nice new extension to the Assets API allows the user a quick way to get the projects (from which Issue objects can
+    be created) as well as which Organizations an Asset receives project data from. These related entities must
+    be called explicitly and are not returned by default. This is because the API can return a large number of items
+    and we want to avoid overwhelming the user with data.
+    '''
     if len(assets) > 0:
         for asset in assets:
             asset.get_projects()
             asset.get_orgs()
+
     '''
     Some entities are able to call a singular get_ for the object. For example, the Group object has a get_asset()
     method after being provided an asset_id. This will return a single Asset object that is NOT set in the class.

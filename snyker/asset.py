@@ -1,23 +1,23 @@
 from __future__ import annotations
-from urllib.parse import urlparse
 from typing import TYPE_CHECKING, List, Dict, Optional
 
 if TYPE_CHECKING:
-    from .project import Project
-    from .organization import Organization
+    from snyker import APIClient, Group, Organization, Project
+from urllib.parse import urlparse
+
+from snyker import APIClient, Group, Organization, Project
 
 api_version = "2024-10-15"  # Set the API version.
 
 
 class Asset:
-    def __init__(self, asset, group=None):
-        from snyker.group import Group
-        if group is None:
-            self.group = Group()
-        self.group = group
-        self.api_client = group.api_client
+    def __init__(self, asset,
+                 group: Optional['Group'] = None,
+                 api_client: Optional['APIClient'] = None,
+                 params: dict = {}):
+        self.group = Group() if group is None else group
+        self.api_client = self.group.api_client if api_client is None else api_client
         self.logger = self.api_client.logger
-        self.projects = None
 
         # string
         self.raw = asset
@@ -34,7 +34,11 @@ class Asset:
         self.sources = asset['attributes']['sources']
         self.coverage_controls = asset['attributes'].get('coverage_control')
         if 'snyk' in self.sources:
-            self.organizations = asset['attributes']['organizations']
+            self.logger.debug(f"[Asset ID: {self.id}].__init__ found Snyk source, extracting organizations from "
+                              f"{self.raw['attributes']['organizations']} ")
+            self.organizations = []
+            for organization in asset['attributes']['organizations']:
+                self.organizations.append(Organization(org_id=organization['id'], group=self.group, params=params))
 
         # boolean
         self.archived = asset['attributes'].get('archived')
@@ -64,6 +68,7 @@ class Asset:
             self.image_tags = asset['attributes'].get('image_tags')
             self.image_registries = asset['attributes'].get('image_registries')
             self.image_repositories = asset['attributes'].get('image_repositories')
+        self.logger.info(f"[Asset ID: {self.id}].__init__ created asset object for {self.name}")
 
     def githubNameAndOwnerFromUrl(self) -> tuple[str, str]:
         """ Helper function to extract the GitHub name and owner from the browser URL."""
@@ -103,13 +108,20 @@ class Asset:
             headers=headers,
             params=params,
         ).json()
-        for project in response['data']:
-            project = Project(project_id=project['id'],
-                              organization=Organization(org_id=project['attributes']['organization_id'],
-                                                        group=self.group),
-                              group=self.group,
-                              params=params)
-            projects.append(project)
+        projects = []
+        while response.status_code == 200 and 'data' in response.json():
+            for project in response.json()['data']:
+                organization = next(
+                    (org for org in self.organizations if org.id == project['attributes']['organization_id']))
+                projects.append(Project(project_id=project['id'],
+                                        organization=organization,
+                                        group=self.group,
+                                        params=params))
+            uri = response.json()["links"].get("next") if "next" in response.json()['links'] else None
+            if uri:
+                response = self.api_client.get(uri, headers=headers)
+            else:
+                break
         self.projects = projects
         self.logger.info(f"[Asset ID: {self.id}].get_projects found {len(projects)} projects")
         return projects

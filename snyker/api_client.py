@@ -16,7 +16,7 @@ class APIClient:
                  status_forcelist=(429, 500, 502, 503, 504),
                  logging_level=10): # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
 
-        logging.basicConfig(level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
+        logging.basicConfig(level=logging_level, format='%(asctime)s-%(levelname)s-%(message)s')
         self.base_url = os.getenv('SNYK_API',               # Get region url from SNYK_API environment variable
                                   "https://api.snyk.io")    # Default to US_MT_GCP
         self.token = os.getenv('SNYK_TOKEN')  # Get your API token from SNYK_TOKEN environment variable
@@ -52,8 +52,8 @@ class APIClient:
             return response
         except requests.exceptions.HTTPError as e:
             if response.status_code == 429:
-                self.logger.warning(
-                    f"Rate limit encountered: {response.status_code} - {response.headers.get('Retry-After', 'no retry info')}")
+                self.logger.warning("Rate limit encountered: {response.status_code} - "
+                                    "{response.headers.get('Retry-After', 'no retry info')}")
                 retry_after = response.headers.get('Retry-After')
                 if retry_after and retry_after.isdigit():
                     self.rate_limit_delay = int(retry_after) + 1
