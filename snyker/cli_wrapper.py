@@ -1,12 +1,8 @@
-# A Snyk CLI wrapper that calls Snyk APIs to retrieve context metadata and synchronize with Snyk Organization entities'
-# settings and policies.
-#
 from __future__ import annotations
-from typing import TYPE_CHECKING, List
-from snyker import Group
-
+from typing import TYPE_CHECKING, List, Optional
 if TYPE_CHECKING:
-    from .asset import Asset
+    from snyker import Asset
+from snyker import Group
 
 import os
 import subprocess
@@ -15,7 +11,8 @@ import json
 
 
 class CLIWrapper:
-    def __init__(self):
+    def __init__(self,
+                 group: Optional['Group'] = None):
         self.project_directory = os.getenv('GITHUB_WORKSPACE') or os.getenv('CI_PROJECT_DIR') or os.getenv(
             'WORKSPACE') or os.getenv('BUILD_SOURCESDIRECTORY')
         self.org_id = None

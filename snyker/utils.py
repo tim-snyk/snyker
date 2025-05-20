@@ -1,4 +1,7 @@
-def get_nested_value(data, keys, default=None):
+from datetime import datetime, timezone
+
+
+def get_nested(data, keys, default=None):
     """Safely retrieves a nested value from a dictionary using a list of keys."""
     current = data
     for key in keys:
@@ -37,3 +40,30 @@ def search_json(json_obj, search_string):
         if search_string in json_obj:
             return True
     return False
+
+
+def datetime_converter(iso_string_with_z) -> datetime:
+    """
+    Snyk API returns datetime strings that may not play nicely with
+    Python's datetime library, especially when they include fractional seconds.
+    Parses an ISO 8601 string ending with 'Z' (and potentially fractional seconds)
+    into a timezone-aware datetime object (UTC).
+    Example input: '2025-03-01T07:10:35.20124Z'
+    """
+
+    # Remove the 'Z' suffix
+    datetime_str_part = iso_string_with_z[:-1]
+
+    # Determine the correct format string based on presence of fractional seconds
+    if '.' in datetime_str_part:
+        format_string = "%Y-%m-%dT%H:%M:%S.%f"
+    else:
+        format_string = "%Y-%m-%dT%H:%M:%S"
+
+    # Parse the string to a naive datetime object
+    dt_naive = datetime.strptime(datetime_str_part, format_string)
+
+    # Make the datetime object timezone-aware by setting its timezone to UTC
+    dt_aware = dt_naive.replace(tzinfo=timezone.utc)
+
+    return dt_aware

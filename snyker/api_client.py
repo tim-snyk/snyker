@@ -21,8 +21,8 @@ class APIClient:
                  ):
 
         logging.basicConfig(level=logging_level, format='%(asctime)s-%(levelname)s-%(message)s')
-        self.base_url = os.getenv('SNYK_API',               # Get region url from SNYK_API environment variable
-                                  "https://api.snyk.io")    # Default to US_MT_GCP
+        self.base_url = os.getenv('SNYK_API',  # Get region url from SNYK_API environment variable
+                                  "https://api.snyk.io")  # Default to US_MT_GCP
         self.token = os.getenv('SNYK_TOKEN')  # Get your API token from SNYK_TOKEN environment variable
         self.session = requests.Session()
         self.logger = logging.getLogger(__name__)
@@ -43,16 +43,13 @@ class APIClient:
             max_retries=retry_strategy,
             pool_connections=max_workers,
             pool_maxsize=max_workers
-            )
+        )
         self.session.mount('http://', adapter)
         self.session.mount('https://', adapter)
 
         self.rate_limit_delay = 0
         self.last_request_time = 0
         self._rate_limit_lock = threading.Lock()  # Thread safety first!
-
-
-
 
     def _rate_limit(self):
         """Applies a delay if a rate limit was previously encountered. Thread-safe."""
@@ -64,11 +61,12 @@ class APIClient:
             if self.rate_limit_delay > 0:
                 wait_time = self.rate_limit_delay - (time.time() - self.last_request_time)
                 if wait_time > 0:
-                    self.logger.warning(f"Thread {threading.get_ident()}: Rate limit active. Global wait for {wait_time:.2f} seconds.")
+                    self.logger.warning(
+                        f"Thread {threading.get_ident()}: Rate limit active. Global wait for {wait_time:.2f} seconds.")
                     # This sleep will pause the current thread holding the lock, effectively serializing
                     # API-calling operations across threads when a rate limit is hit.
                     time.sleep(wait_time)
-                self.rate_limit_delay = 0 # Reset delay after waiting or if wait_time was not positive
+                self.rate_limit_delay = 0  # Reset delay after waiting or if wait_time was not positive
 
     def _handle_response(self, response: requests.Response) -> Any:
         current_time = time.time()
@@ -80,20 +78,22 @@ class APIClient:
             return response
         except requests.exceptions.HTTPError as e:
             with self._rate_limit_lock:
-                self.last_request_time = current_time # Update time even on error
+                self.last_request_time = current_time  # Update time even on error
                 if response.status_code == 429:
-                    self.logger.warning(f"Thread {threading.get_ident()}: Rate limit error 429. Headers: {response.headers}")
+                    self.logger.warning(
+                        f"Thread {threading.get_ident()}: Rate limit error 429. Headers: {response.headers}")
                     retry_after = response.headers.get('Retry-After')
                     if retry_after and retry_after.isdigit():
-                        self.rate_limit_delay = int(retry_after) + 1 # Add a small buffer
+                        self.rate_limit_delay = int(retry_after) + 1  # Add a small buffer
                     else:
                         # Default delay if Retry-After is not present or not a digit
-                        self.rate_limit_delay = max(self.rate_limit_delay, 5) # Use existing if larger, or default
-                    self.logger.warning(f"Thread {threading.get_ident()}: Updated rate_limit_delay to {self.rate_limit_delay}s")
+                        self.rate_limit_delay = max(self.rate_limit_delay, 5)  # Use existing if larger, or default
+                    self.logger.warning(
+                        f"Thread {threading.get_ident()}: Updated rate_limit_delay to {self.rate_limit_delay}s")
                 else:
                     self.logger.error(f"Thread {threading.get_ident()}: API error: {response.status_code} - {e}")
                     self.logger.error(f"Thread {threading.get_ident()}: Response content: {response.text}")
-            raise # Re-raise the original exception
+            raise  # Re-raise the original exception
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Thread {threading.get_ident()}: Request exception: {e}")
             raise
@@ -101,7 +101,8 @@ class APIClient:
     def get(self, endpoint: str, params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Any:
         self._rate_limit()
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        self.logger.debug(f"Thread {threading.get_ident()}: GET request to: {url} with params: {params}, headers: {headers}")
+        self.logger.debug(
+            f"Thread {threading.get_ident()}: GET request to: {url} with params: {params}, headers: {headers}")
         response = self.session.get(url, params=params, headers=headers)
         self.logger.debug(
             f"Thread {threading.get_ident()}: GET response: {response.status_code} - {response.text[:100]}...")
@@ -110,17 +111,21 @@ class APIClient:
     def post(self, endpoint, data=None, params=None, headers=None):
         self._rate_limit()
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        self.logger.debug(f"Thread {threading.get_ident()}: POST request to: {url} with params: {params}, data: {data}, headers: {headers}")
+        self.logger.debug(
+            f"Thread {threading.get_ident()}: POST request to: {url} with params: {params}, data: {data}, headers: {headers}")
         response = self.session.post(url, params=params, json=data, headers=headers)
-        self.logger.debug(f"Thread {threading.get_ident()}: POST response: {response.status_code} - {response.text[:100]}...")
+        self.logger.debug(
+            f"Thread {threading.get_ident()}: POST response: {response.status_code} - {response.text[:100]}...")
         return self._handle_response(response)
 
     def put(self, endpoint, data=None, params=None, headers=None):
         self._rate_limit()
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        self.logger.debug(f"Thread {threading.get_ident()}: PUT request to: {url} with data: {data}, headers: {headers}")
+        self.logger.debug(
+            f"Thread {threading.get_ident()}: PUT request to: {url} with data: {data}, headers: {headers}")
         response = self.session.put(url, json=data, params=params, headers=headers)
-        self.logger.debug(f"Thread {threading.get_ident()}: PUT response: {response.status_code} - {response.text[:100]}...")
+        self.logger.debug(
+            f"Thread {threading.get_ident()}: PUT response: {response.status_code} - {response.text[:100]}...")
         return self._handle_response(response)
 
     def delete(self, endpoint, params=None, headers=None):
@@ -128,12 +133,14 @@ class APIClient:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         self.logger.debug(f"Thread {threading.get_ident()}: DELETE request to: {url} with headers: {headers}")
         response = self.session.delete(url, params=params, headers=headers)
-        self.logger.debug(f"Thread {threading.get_ident()}: DELETE response: {response.status_code} - {response.text[:100]}...")
+        self.logger.debug(
+            f"Thread {threading.get_ident()}: DELETE response: {response.status_code} - {response.text[:100]}...")
         return self._handle_response(response)
 
     def submit_task(self, func, *args, **kwargs) -> concurrent.futures.Future:
         """Submits a callable to the internal thread pool executor."""
-        self.logger.debug(f"Thread {threading.get_ident()}: Submitting task {getattr(func, '__name__', repr(func))} to executor.")
+        self.logger.debug(
+            f"Thread {threading.get_ident()}: Submitting task {getattr(func, '__name__', repr(func))} to executor.")
         return self.executor.submit(func, *args, **kwargs)
 
     def close(self):
@@ -161,7 +168,7 @@ class APIClient:
                 call_params = None if page_count > 0 else current_params
             else:
                 api_endpoint_path = next_page_url_or_relative_path
-                call_params = current_params # Use current_params for relative paths
+                call_params = current_params  # Use current_params for relative paths
 
             response_obj = self.get(endpoint=api_endpoint_path, params=call_params, **kwargs)
             page_count += 1
@@ -169,10 +176,11 @@ class APIClient:
 
             if data_key:
                 items = response_json.get(data_key)
-                if items is not None: # Check for None explicitly, as empty list is valid
+                if items is not None:  # Check for None explicitly, as empty list is valid
                     yield from items
                 else:
-                    self.logger.warning(f"Data key '{data_key}' not found in response for {api_endpoint_path} page {page_count}")
+                    self.logger.warning(
+                        f"Data key '{data_key}' not found in response for {api_endpoint_path} page {page_count}")
                     break
             else:
                 yield response_json
@@ -182,10 +190,11 @@ class APIClient:
             next_page_url_or_relative_path = links.get(pagination_key)
 
             if not next_page_url_or_relative_path:
-                self.logger.debug(f"No '{pagination_key}' link found in pagination, ending pagination after {page_count} pages.")
+                self.logger.debug(
+                    f"No '{pagination_key}' link found in pagination, ending pagination after {page_count} pages.")
                 break
             else:
-                current_params = None # Assume 'next' link is self-contained or new params will be derived
+                current_params = None  # Assume 'next' link is self-contained or new params will be derived
                 self.logger.debug(f"Next page link for pagination: {next_page_url_or_relative_path}")
 
 

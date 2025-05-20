@@ -1,31 +1,27 @@
 from snyker import Group, APIClient
-
+import json
 
 def main():
+    """
+    Example of how to use the Snyk API client to get all issues in a group and print them. Doubles as a test case.
+    """
+
     '''
     First, set your SNYK_TOKEN envar with a Group-Scoped Service Account Token. This allows you to run this script
-    without needing to specify a group_id like shown below with print(Group().id)
-    '''
-    group = Group(api_client=APIClient(
-        max_retries=15,  # Number of retries when hitting rate limits
-        backoff_factor=0.5,  # Backoff factor for retries
-        logging_level=20))  # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
+    without needing to specify a group_id: Group() 
+    
+    Every class in snyker with an API associated with it will either have an APIClient object built for them with 
+    default values, inherits it from a parent caller object or can be explicitly provided with a new one.
+
+    The APIClient class is responsible for making the API calls and handling rate limits, queueing, as well as 
+    logging configuration. Next to be supported is multithreading and async calls.
 
     '''
-    Every object with an API associated with it will either have an APIClient object built for them with default values,
-    inherited one from a parent caller object or can be explicitly provided one.
-
-    The APIClient object is responsible for making the API calls and handling rate limits as well as logging events
-    at multiple levels. Next to be supported is multithreading and async calls.
-    '''
-
-    group.get_orgs()
-    issues = []
-    for org in group.orgs:
-        org.get_projects()
-        for project in org.projects:
-            issues += project.get_issues()
-    print(len(issues))
+    group = Group(
+        api_client=APIClient(
+            max_retries=15,  # Number of retries when hitting rate limits
+            backoff_factor=0.5,  # Backoff factor for retries
+            logging_level=20))  # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
 
     '''
     Example showing how to get all organizations in a group. Calling a get_ method on objects will both return the 
@@ -36,22 +32,41 @@ def main():
         print(f"Matching sets of orgs. Total Orgs: {len(orgs)}, Total Orgs in Group: {len(group.orgs)}")
 
     '''
+    Policy class has some extensibility designed for it, hence the policy.conditions_group attribute is a 
+    ConditionsGroup defined within the Policy class file to access the conditions of the policy.
+    '''
+    policy_finding_ids = []
+    for org in group.orgs:
+        org.get_policies()  # Instantiate before accessing
+        if org.policies:    # If no policies, skip
+            for policy in org.policies:
+                print(f"{policy.conditions_group.field}: {policy.conditions_group.value}, id: {policy.id}")
+                policy_finding_ids.append(policy.conditions_group.value)
+    print(f"Policies found with finding ids: {len(policy_finding_ids)}")
+    '''
     Example showing how to get issues based on parameters provided. See the following link for all supported parameters:
     https://apidocs.snyk.io/#get-/groups/-group_id-/issues
     '''
 
     group.issues = group.get_issues(
-        params={
-            "type": "code",  # Type of project in Snyk
-            "status": "resolved",  # Status filter of the issues to return
-            "ignored": False  # Filter to include ignored issues
-        })
-    group.issues = group.get_issues(
         params=dict(
             type="code",
-            status="resolved",
-            ignored=False
+            ignored=True
         ))
+
+    issue_finding_ids = []
+    for issue in group.issues:
+        if hasattr(issue, 'key_asset') and issue.key_asset is not None:
+            issue_finding_ids.append(issue.key_asset)
+            print(f"key_asset: {issue.key_asset}, id: {issue.id}")
+
+    print(f"Issues with key_asset: {len(issue_finding_ids)}")
+
+    diff_1 = list(set(issue_finding_ids) - set(policy_finding_ids))
+    diff_2 = list(set(policy_finding_ids) - set(issue_finding_ids))
+    print(f"{len(diff_1)} Finding IDs in issues but not in policies: {diff_1}")
+    print(f"{len(diff_2)} Finding IDs in policies but not in issues: {diff_2}")
+
 
     '''
     Example in accessing a sub-entity like Assets, we can get all assets in a group which are returned as a list of 
@@ -114,15 +129,59 @@ def main():
     method after being provided an asset_id. This will return a single Asset object that is NOT set in the class.
     '''
     asset = group.get_asset(assets[0].id)  # get_asset by Asset object's .id
-    print(json.dumps(asset.raw, indent=4))  # Print the raw asset data
-    # asset = group.get_asset('<your_asset_id>')           # get_asset by string
+    asset = group.get_asset('1189c6ce067aa3a5e1896bedaab6614b')           # get_asset by string
 
-    #  Ask user to press enter to exit, then exit when they do
-    print("Press Enter to exit...")
-    input()
     group.api_client.close()
-    exit(0)
+    return
 
 
 if __name__ == "__main__":
     main()
+    print("""
+    +++++++++++++++++++=----=*##***************************=:......:::.....::-::...::-=+*##########################################
++++++++++++++++++++=----=*##**************************+=::....::::......::::....:--=+**########################################
++++++++++++++++++++=----=*###*******************+====++++***####*=:.....:-::....:=--=--=*######################################
++++++++++++++++++++=----=*###*****************+==--=*#%%%%%%@@@%@@%%#-..:--:...:=======-==*********#*##########################
++++++++++++++++++++=----=*###****+--+***=--=*+=--=*##%#%%%%@@@@@@%@%%%%#*=-:.----++===--=-=*****************#**##*####**######*
++++++++++++++++++++=----=*#*****+=-=++===-==*+=+*#%#%%%@@@@@@@@@@@@@@%%%%%#+:-+=-===++==----+******************************###*
+++++++++++++++++++++=---=+*##**+===++=--==+%**%%%%@@@@@@@@@@@@@@@@@@@@%%%%%%#+:=++=--==+==--=+*********************************
++++++++++++++++++++=-:::-=*#**++=++=--==+#=---+@@@@@@@@@@@@@@@@@@@@@@@%@@%##%##*:.=+=---=++-==+********************************
++++++++++++++++++++=-:..:=*#*+====---=++=---=+%@@@@@@@@@@@@@@@@@@@@@@@%@@@%%%%%##-::++=--=++==+********************************
++++++++++++++++++++=-...:=+*++===--=++=---=+%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%@@%%%%-:--++=-==+==********************************
++++++++++++++++++++=-:.:-=*++===-=++=---=+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%%%%%#-:-==+=-====+*******************************
++++++++++++++++++++=-:::-+++==--++=---==#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%-:-=-=--=++=-=====*******************************
++++++++++++++++++++=-:::=++===-++==--+*@@@@@@@@@%%%@@@@@@@@@@@@@@@@@@@@@@@@@@@#==-----==+==-=====******************************
++++++++++++++++++++=-:::=====-+==--==+@@@#*=--=%%%%%%@@@@@@@@@@@@@@@@@@@@@@@@@@@%#+==--=====-=====*****************************
++++++++++++++++++++=-:::====-+==--==+@%*=-----*%%%####%%%%@@@@@@@@@@@@@@@@@@@@@@@@%@#+=============****************************
++++++++++++++++++++=-::========--==*+=----==*%%%%%#******###%%@%%@@@@@@@@@@@@@@@@@@@@*=*==-=========***************************
++++++++++++++++++++=-:=======---======---+%@@%@%%%##*+****+*##%%%%%%@@@@%%%%%%@@@@@@@%+*+=---========**************************
++++++++++++++++++++=--======--====----=+%@@@@@@%%#***+++++====+*###%%##%#****##%@@@@@@*+++=--=======--*************************
++++++++++++++++++++============-----==#@@@@@@%%##****#*+++==+=+--+=++*****###**#%@@@@@##%#*=--=---=-=--************************
+++++++++++++++++++++=========------=%@@@@@@@%%**********#***+++=-+++***###***+**%@@@@@#*%%*=----=--=====***********************
++++++++++++++++++++==+=====-=----==%@@@@@@@%#*****+++*+=====++++==++==++++++****#@@@@@#**##+=----=--===+=+*********************
+++++++++++++++++++======--------=*%@@@@@@@@#*****++++*##%##*++++==+++***####*****%@@@%*****+==--------=-:-+********************
++++++++++++++++++=+====---------=%@@@@@@@@%#**+**++++=====++=+++==+*++++===++*+**%@@@+******+==----------::=*******************
+++++++++++++++++=====----------=+*@@@@@@@@%#****++++=========+++==++++======++++*%@@%+*******=====--------=--+***************#*
+++++++++++++++======----------=+++%@@@@@@@%#*++++++=========+=++==+++++=======++*#@@*=********+====-------==---**********#####*
+++++++++++++======----------==+*++*@@%@%@%%**++++===---======++====+++========+++#@%++***********++=-------===--+********######
+++++++++++======-----------==+***++#@%%%%%#***+++===----====+++=---=++*=======+++##-=+*************+=---------=---********#####
++++++++++======---------===++***++++%#%%%##***++++===-----=++=======++++=====+++**=-=+*************++=--------=----+#######*###
+++++++++======--------===++*****++++*##%%*****+++++=====-=+=+*##+++*##++=====+++*--:-+***************+=--------------+--=-=+###
+++=:-+=======-------==++-=******+++==####******++++++============++=++++====++++++::-+***************++==--------=---+#*--=--+*
+++-++*=====--------==+-:-=*******++=-=%#++*****+++++================++++++++++++++.:-=****************+====-------=-=+*#+==-=#*
++++==++===--------==+=:--=*******++=--%@#*##****++=+===========+===+++++++++++++:...:=+****************+====-------===--:=-=-=*
+=-====++==------==++=-:::=+*****+++=--*@@@@#***+++=+=========+********++++++++++:...:-=****************+====-==---==--::---==-=
+-====++++=----===+++=-:.:-=******+==-:-%@@#*****++=========++*#*******++++++++++-:...:-+***************++====++======----=---=-
+===-=+++========++++=:...:=******+==--::---+*****+++========+++*++++*+++++++++##+:::..:=+****************=====+=======-------==
+=-==-=++====++++++=+=:...:=******++=--::::--+*****+++==+=======++**++=+++++++#%#*+--:..:-==++=======---==========++===------===
+=====--===++++++===+=-:.:-=******++==--=++===+++***++++++===++===++=++++=+++*%%#*++=:....-=-=----=-:::--========+=+====-=====-=
+==----=++==++++*++++=-:::-+***++++=--+=++====-+++**+++++++======----=====+++#%%#*+++-::-+==+==-=-=--=+++*+=======++++======--==
+=--======+++++++-=++=------*+=+==--=+#++=-=====-++++++++++====-------==++++*#%#**++=---==++++==-++==*++*===---======+====-----=
+-=======++=+++=++=----======-=*++++==*++=========-=+*+++++++==========+++++*#%#*+++=-==++++++===++=+***+++==----===========----
+=--===+++==++===*==--==++++++=+*++*+=-=+=======+==+=+****+++++++++++++++++*****+++==-====+**====+*=**++++*+===-=-===========---
+=========+++===+#+===---==++++==++*++---+===-==+++===*#***++*++++++++++**+*=**+*++===++==+++-===+*=*+++++=+==-==-=============-
+========+++====+#+==+++===++++====+*++--======-===+===+#***++++++++++++++--*+++++===+*+++=+=--===++*=+==++++===-=-=====+=====--
+=======++++====+%+=====+=+=+++====++*++--=-====--====+++*+++++++++==-::.::++++========:-+=+=--====**+==+++=++==========+====---
+==++=+++++=====+%*==+=++===+++======++==--=--=======-+=:...............::--=--=-======:-+====-====+*+=++==+++===========++=====
+====+==++++=+==+#*+=======++*+==========--==---======++=:.................===----=-==-:============#+====+======+==============
+    """)
