@@ -3,14 +3,13 @@ import requests
 import json
 import time
 import traceback
-from typing import TYPE_CHECKING, List, Dict, Optional
-if TYPE_CHECKING:
-    from snyker import APIClient, Group, Asset, Organization, Issue
+from typing import TYPE_CHECKING, List, Optional
 
+if TYPE_CHECKING:
+    from snyker import APIClient, Group, Organization, Issue
 
 apiVersion = "2024-10-15"  # Set the API version.
 
-# TODO: Replace with your URLs
 originUrls = {
     'github': 'https://github.com',
     'github-enterprise': 'https://github.com',  # May need to be updated to use the enterprise URL
@@ -28,7 +27,7 @@ class Project:
                  organization: 'Organization',
                  group: Optional['Group'] = None,
                  api_client: Optional['APIClient'] = None,
-                 params: dict = {}):
+                 params: dict = {}) -> Project:
 
         self.id = project_id
         self.organization = organization

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Dict, Optional
+
 if TYPE_CHECKING:
     from snyker import APIClient, Organization, Asset, Project, Issue
 from snyker import APIClient
@@ -7,9 +8,10 @@ import json
 
 api_version = "2024-10-15"  # Set the API version.
 
+
 class Group:
     def __init__(self,
-                 group_id:str = None,
+                 group_id: str = None,
                  api_client: Optional['APIClient'] = None,
                  params: dict = {}):
         self.api_client = APIClient(max_retries=15,
@@ -134,7 +136,7 @@ class Group:
         self.logger.info(f"[Group ID: {self.id}].get_assets found {len(assets)} assets")
         return assets
 
-    def get_orgs(self, org_name=None, org_slug=None, params: dict = {}) -> list[Organization]:
+    def get_orgs(self, params: dict = {}) -> list[Organization]:
         from snyker.organization import Organization
         '''
         # GET /rest/groups/{group_id}/orgs
@@ -144,19 +146,15 @@ class Group:
             'Content-Type': 'application/json',
             'Authorization': f'{self.api_client.token}'
         }
-        params = {
+        current_params = {
             'version': api_version,
             'limit': 100,
-            'name': org_name,  # Only return orgs whose name contains this value.
-            'slug': org_slug,  # Only return orgs whose slug contains this value.
-            'expand': None,  # 'member_role'
         }
-        params.update(params)
-
+        current_params.update(params)
         response = self.api_client.get(
             uri,
             headers=headers,
-            params=params
+            params=current_params
         )
 
         organizations = []
@@ -204,4 +202,3 @@ class Group:
         self.issues = issues
         self.logger.info(f"[Group: {self.id}].get_issues found {len(self.issues)} issues params:{dict(params)}")
         return issues
-
