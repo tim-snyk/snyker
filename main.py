@@ -14,7 +14,7 @@ def main():
     default values, inherits it from a parent caller object or can be explicitly provided with a new one.
 
     The APIClient class is responsible for making the API calls and handling rate limits, queueing, as well as 
-    logging configuration. Next to be supported is multithreading and async calls.
+    logging configuration.
 
     '''
     group = Group(
@@ -27,6 +27,8 @@ def main():
     Example showing how to get all organizations in a group. Calling a get_ method on objects will both return the 
     list of objects as well set the objects attribute on the object itself.
     '''
+    group.get_issues()
+    exit(0)
     orgs = group.get_orgs()
     if orgs == group.orgs:
         print(f"Matching sets of orgs. Total Orgs: {len(orgs)}, Total Orgs in Group: {len(group.orgs)}")
@@ -129,7 +131,7 @@ def main():
     method after being provided an asset_id. This will return a single Asset object that is NOT set in the class.
     '''
     asset = group.get_asset(assets[0].id)  # get_asset by Asset object's .id
-    asset = group.get_asset('1189c6ce067aa3a5e1896bedaab6614b')           # get_asset by string
+    asset = group.get_asset('1189c6ce067aa3a5e1896bedaab6614b')  # get_asset by string
 
     group.api_client.close()
     return
@@ -138,7 +140,7 @@ def main():
 if __name__ == "__main__":
     main()
     print("""
-    +++++++++++++++++++=----=*##***************************=:......:::.....::-::...::-=+*##########################################
++++++++++++++++++++=----=*##***************************=:......:::.....::-::...::-=+*##########################################
 +++++++++++++++++++=----=*##**************************+=::....::::......::::....:--=+**########################################
 +++++++++++++++++++=----=*###*******************+====++++***####*=:.....:-::....:=--=--=*######################################
 +++++++++++++++++++=----=*###*****************+==--=*#%%%%%%@@@%@@%%#-..:--:...:=======-==*********#*##########################

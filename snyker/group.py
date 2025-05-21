@@ -170,7 +170,7 @@ class Group:
         self.logger.info(f"[Group ID: {self.id}].get_orgs found {len(organizations)} organizations")
         return organizations
 
-    def get_issues(self, params: dict = None) -> list[Issue]:
+    def get_issues(self, params: dict = {}) -> list[Issue]:
         from snyker.issue import Issue
         '''
         # GET /rest/groups/{groupId}/issues?version={apiVersion}
