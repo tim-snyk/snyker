@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, List, Dict, Optional
 if TYPE_CHECKING:
     from snyker import APIClient, Organization, Asset, Project, Issue
 
-
+name = str('blah')
+print = ('hello', name)
 class Issue:
     def __init__(self,
                  issue_data: dict,
@@ -14,65 +15,77 @@ class Issue:
                  org: Optional['Organization'] = None,
                  project: Optional['Project'] = None,
                  ):
+        try:
+            # Issue must be created with one of the following attached to it: Group, Organization, Project
+            if group is None and org is None and project is None:
+                raise ValueError("Issue must be created with one of the following: Group, Organization, Project")
+            if project is not None:
+                self.project = project
+                self.group = project.group
+                self.org = project.org
+            elif org is not None:
+                self.org = org
+                self.group = org.group
+            self.raw = issue_data
+            self.id = self.raw['id']
+            self.type = self.raw['type']  # package_vulnerability, license, code, custom, config
 
-        # Issue must be created with one of the following attached to it: Group, Organization, Project
-        if group is None and org is None and project is None:
-            raise ValueError("Issue must be created with one of the following: Group, Organization, Project")
-        if project is not None:
-            self.project = project
-            self.group = project.group
-            self.org = project.org
-        elif org is not None:
-            self.org = org
-            self.group = org.group
-        self.raw = issue_data
-        self.id = self.raw['id']
-        self.type = self.raw['type']  # package_vulnerability, license, code, custom, config
-
-        # Attributes
-        attributes = issue_data['attributes']
-        self.created_at = datetime_converter(attributes['created_at'])
-        self.updated_at = datetime_converter(attributes['updated_at'])
-        self.title = attributes['title']
-        self.effective_severity_level = attributes['effective_severity_level']  # info, low, medium, high, critical
-        self.ignored = bool(attributes['ignored'])
-        self.key = attributes['key']  # Project-scoped identities
-        self.status = attributes['status']  # open, resolved
-        # Optional attributes
-        if attributes.get('key_asset'):
-            self.key_asset = attributes['key_asset']  # Asset-scoped identities
-        if attributes.get('tool'):
-            self.tool = attributes.get('tool')  # Tool that generated the issue
-        if self.status == 'resolved':
-            self.resolved_at = datetime_converter(attributes['resolution']['resolved_at'])
-            self.resolution_type = attributes['resolution']['type']
-        self.coordinates = get_nested(issue_data, ['attributes', 'coordinates'], [])
-        self.status = get_nested(issue_data, ['attributes', 'status'], None)
-        # Classes
-        self.classes = []
-        for class_data in attributes['classes']:
-            self.classes.append(self.Classes(class_data))
-        # Coordinates
-        self.coordinates = []
-        if 'coordinates' in attributes:
-            for coordinate_data in attributes['coordinates']:
-                self.coordinates.append(coordinate_data)
-        # Risk
-        self.risk = []
-        if 'risk' in attributes:
-            self.risk.append(self.Risk(attributes['risk']))
-        # Severities
-        if 'severities' in attributes:
+            # Attributes
+            attributes = issue_data['attributes']
+            self.created_at = datetime_converter(attributes['created_at'])
+            self.updated_at = datetime_converter(attributes['updated_at'])
+            self.title = attributes['title']
+            self.effective_severity_level = attributes['effective_severity_level']  # info, low, medium, high, critical
+            self.ignored = bool(attributes['ignored'])
+            self.key = attributes['key']  # Project-scoped identities
+            self.status = attributes['status']  # open, resolved
+            # Optional attributes
+            if attributes.get('key_asset'):
+                self.key_asset = attributes['key_asset']  # Asset-scoped identities
+            if attributes.get('tool'):
+                self.tool = attributes.get('tool')  # Tool that generated the issue
+            if self.status == 'resolved':
+                self.resolved_at = datetime_converter(attributes['resolution']['resolved_at'])
+                self.resolution_type = attributes['resolution']['type']
+            self.coordinates = get_nested(issue_data, ['attributes', 'coordinates'], [])
+            self.status = get_nested(issue_data, ['attributes', 'status'], None)
+            # Classes
+            self.classes = []
+            if 'classes' in attributes:
+                for class_data in attributes['classes']:
+                    self.classes.append(self.Classes(class_data))
+            # Coordinates
+            self.coordinates = []
+            if 'coordinates' in attributes:
+                for coordinate_data in attributes['coordinates']:
+                    self.coordinates.append(coordinate_data)
+            # Risk
+            self.risk = []
+            if 'risk' in attributes:
+                self.risk.append(self.Risk(attributes['risk']))
+            # Severities
             self.severities = []
-            for severity_data in attributes['severities']:
-                self.severities.append(self.Severities(severity_data))
-        # Relationships
-        if 'organization' in issue_data['relationships']:
-            self.org_id = issue_data['relationships']['organization']['data']['id']
-            self.org_uri = issue_data['relationships']['organization']['links']['related']
-        if 'scan_item' in issue_data['relationships']:
-            self.project_id = issue_data['relationships']['scan_item']['data']['id']
-            self.project_uri = issue_data['relationships']['scan_item']['links']['related']
+            if 'severities' in attributes:
+                for severity_data in attributes['severities']:
+                    self.severities.append(self.Severities(severity_data))
+            # Relationships
+            relationships = issue_data['relationships']
+            if 'organization' in relationships:
+                self.org_id = relationships['organization']['data']['id']
+            if 'scan_item' in relationships:
+                if relationships['scan_item']['data']['type'] == 'project':
+                    self.project_id = relationships['scan_item']['data']['id']
+                if relationships['scan_item']['data']['type'] == 'environment':
+                    self.environment_id = relationships['scan_item']['data']['id']
+            if 'ignore' in relationships:
+                self.ignore_id = relationships['data']['id']
+
+        # Catch KeyError
+        except KeyError as e:
+            import json
+            self.logger.error(f"KeyError: {e}, issue.raw: {json.dumps(self.issue.raw, indent=4)}")
+            raise KeyError(f"Missing key in issue data: {e}")
+
 
     class Coordinate:
         """
@@ -160,18 +173,20 @@ class Issue:
         """
         def __init__(self, risk_data: dict):
             self.factors = []
-            for factor_data in risk_data['factors']:
-                self.factors.append(self.Factor(factor_data))
+            if 'factors' in risk_data:
+                for factor_data in risk_data['factors']:
+                    self.factors.append(self.Factor(factor_data))
             if risk_data.get('score'):
                 self.score = risk_data['score']['value']
                 self.model = risk_data['score']['model']
 
-        class Factors:
+        class Factor:
             """
-            Factors class represents the factors of the risk score.
+            Factor class represents the factors of the risk score.
             """
             def __init__(self, factor_data: dict):
-                self.included_in_score = bool(factor_data['included_in_score'])
+                if 'included_in_score' in factor_data:  # Optional in API spec
+                    self.included_in_score = bool(factor_data['included_in_score'])
                 self.name = factor_data['name']
                 self.updated_at = datetime_converter(factor_data['updated_at'])
                 self.value = bool(factor_data['value'])
