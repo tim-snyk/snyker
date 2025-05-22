@@ -14,7 +14,8 @@ Prerequisites:
 - Ensure the 'snyker' package is installed.
 - Set the SNYK_TOKEN environment variable with a Snyk Group-scoped Service Account token.
 """
-from snyker import Group, APIClient
+from snyker import GroupPydanticModel, APIClient, Asset, OrganizationPydanticModel, ProjectPydanticModel, IssuePydanticModel
+from typing import List, Optional # Added List and Optional
 import json
 import os # For SNYK_TOKEN check
 
@@ -39,48 +40,51 @@ def main():
         logging_level=20  # Set to INFO for this example
     )
 
-    # Initialize the Group. If group_id is not provided, it attempts to find
-    # a single group associated with the token.
-    # If multiple groups exist, you'll need to provide a specific group_id.
+    # Initialize the GroupPydanticModel using its factory method.
+    # If group_id is not provided, it attempts to find a single group.
+    # If multiple groups exist for the token, it will raise a ValueError.
     try:
-        group = Group(api_client=api_client)
+        # Using a known test group ID for this example. Replace with your actual group ID if needed.
+        test_group_id = "9365faba-3e72-4fda-9974-267779137aa6" 
+        group = GroupPydanticModel.get_instance(api_client=api_client, group_id=test_group_id)
         print(f"Successfully initialized Group: '{group.name}' (ID: {group.id})")
     except ValueError as e:
         print(f"Error initializing Group: {e}")
-        print("If multiple groups are found, you may need to specify a 'group_id' when creating the Group object:")
-        print("  ex: group = Group(group_id='your-group-id', api_client=api_client)")
+        print("If multiple groups are found for your token, you may need to specify a 'group_id':")
+        print("  ex: group = GroupPydanticModel.get_instance(api_client=api_client, group_id='your-group-id')")
         api_client.close()
         return
 
     # --- Fetching Organizations, Projects, and Issues ---
     print("\nFetching organizations, projects, and issues...")
     try:
-        # Fetch organizations. You can pass parameters, e.g., to filter by slug.
-        # Replace 'your-org-slug' with an actual slug if you want to test filtering.
-        # For this example, we fetch all orgs in the group.
-        organizations = group.get_orgs() # params={'slug': 'your-org-slug'}
+        # Access organizations using the property (triggers lazy/eager loading based on config).
+        # To pass specific fetch parameters, call the fetch_organizations() method directly.
+        # Example: organizations = group.fetch_organizations(params={'slug': 'your-org-slug'})
+        organizations: List[OrganizationPydanticModel] = group.organizations
         print(f"Found {len(organizations)} organization(s) in group '{group.name}'.")
 
-        all_project_issues = []
+        all_project_issues: List[IssuePydanticModel] = []
         for org in organizations:
             print(f"\n  Organization: '{org.name}' (ID: {org.id})")
-            # Fetch projects within the organization.
-            # Replace 'cli' with other origins if needed, or remove for all projects.
-            projects = org.get_projects() # params={'origins': 'cli'}
+            # Access projects for the organization.
+            # Example: projects = org.fetch_projects(params={'origins': 'cli'})
+            projects: List[ProjectPydanticModel] = org.projects
             print(f"    Found {len(projects)} project(s) in organization '{org.name}'.")
 
             for proj in projects:
-                print(f"      Project: '{proj.name}' (ID: {proj.id})")
-                # print(f"        Raw project data (first 500 chars): {json.dumps(proj.raw['data'], indent=2)[:500]}...")
-
-                # Fetch issues for each project
-                issues = proj.get_issues()
+                print(f"      Project: '{proj.name}' (ID: {proj.id}, Type: {proj.project_type})")
+                # To access raw data, Pydantic models can be dumped: json.loads(proj.model_dump_json(indent=2))
+                # print(f"        Raw project data (first 500 chars): {proj.model_dump_json(indent=2)[:500]}...")
+                
+                # Access issues for each project.
+                issues: List[IssuePydanticModel] = proj.issues
                 print(f"        Found {len(issues)} issue(s) for project '{proj.name}'.")
                 if issues:
                     all_project_issues.extend(issues)
-                    # print(f"          First issue ID (if any): {issues[0].id}")
+                    # print(f"          First issue ID (if any): {issues[0].id}, Title: {issues[0].title}")
 
-        print(f"\nTotal issues collected from all projects: {len(all_project_issues)}")
+        print(f"\nTotal issues collected from all projects via iteration: {len(all_project_issues)}")
 
     except Exception as e:
         print(f"An error occurred while fetching orgs/projects/issues: {e}")
@@ -89,18 +93,18 @@ def main():
     print("\nFetching 'code' issues (ignored=True) directly from the group...")
     try:
         # This demonstrates fetching issues at the group level with specific filters.
-        # Note: This will overwrite group.issues if it was populated by other means.
-        # If you want to append, manage the list separately.
-        group_code_issues = group.get_issues(
-            params={
-                'type': "code",      # e.g., 'code', 'license', 'vuln'
-                'ignored': True      # e.g., True, False
-                # Add other parameters as needed, see Snyk API docs for /issues endpoint
-            }
-        )
-        print(f"Found {len(group_code_issues)} 'code' issues (ignored=True) in the group.")
+        # Use fetch_issues for explicit fetching with parameters.
+        # The 'issues' property on GroupPydanticModel would fetch with default/no params.
+        group_code_issues_params = {
+            'type': "code",
+            'ignored': True
+        }
+        group_code_issues: List[IssuePydanticModel] = group.fetch_issues(params=group_code_issues_params)
+        print(f"Found {len(group_code_issues)} 'code' issues (ignored=True) in the group using fetch_issues with params.")
         if group_code_issues:
-            print(f"  Example issue ID: {group_code_issues[0].id}, Key Asset: {getattr(group_code_issues[0], 'key_asset', 'N/A')}")
+            # Accessing attributes via Pydantic model structure
+            example_issue = group_code_issues[0]
+            print(f"  Example issue ID: {example_issue.id}, Key Asset: {example_issue.attributes.key_asset}")
 
     except Exception as e:
         print(f"An error occurred while fetching group-level issues: {e}")
@@ -109,47 +113,42 @@ def main():
     print("\nFetching assets matching a query (e.g., 'repository' type with 'snyker' in name)...")
     # Replace with a query relevant to your Snyk assets.
     # Asset types can be 'repository', 'image', 'package', etc.
-    asset_query = {
+    asset_query = { # Ensure this query structure matches what get_assets_by_query expects
+        # The internal structure of the query for POST /assets/search might be specific
         "query": {
             "attributes": {
                 "operator": "and",
                 "values": [
-                    {
-                        "attribute": "type",
-                        "operator": "equal",
-                        "values": ["repository"]
-                    },
-                    {
-                        "attribute": "name",
-                        "operator": "contains",
-                        "values": ["snyker"] # Modify this to match an asset name in your group
-                    }
+                    {"attribute": "type", "operator": "equal", "values": ["repository"]},
+                    {"attribute": "name", "operator": "contains", "values": ["snyker"]}
                 ]
             }
         }
     }
     try:
-        assets = group.get_assets(query=asset_query)
+        # Use the new method name for querying assets
+        assets: List[Asset] = group.get_assets_by_query(query=asset_query)
         print(f"Found {len(assets)} asset(s) matching the query.")
         if assets:
-            example_asset = assets[0]
+            example_asset: Asset = assets[0]
             print(f"  Example asset: '{example_asset.name}' (ID: {example_asset.id}, Type: {example_asset.type})")
 
-            # Accessing raw data (the full JSON response for the asset)
-            # print(f"    Raw asset data (first 500 chars): {json.dumps(example_asset.raw, indent=2)[:500]}...")
+            # Accessing raw data from Pydantic model
+            # print(f"    Raw asset data (first 500 chars): {example_asset.model_dump_json(indent=2)[:500]}...")
 
-            # Fetching related entities for an asset
+            # Fetching related entities for an asset using properties
             print(f"    Fetching projects related to asset '{example_asset.name}'...")
-            asset_projects = example_asset.get_projects()
+            asset_projects: List[ProjectPydanticModel] = example_asset.projects
             print(f"      Found {len(asset_projects)} project(s) for this asset.")
 
             print(f"    Fetching organizations related to asset '{example_asset.name}'...")
-            asset_orgs = example_asset.get_orgs()
+            asset_orgs: List[OrganizationPydanticModel] = example_asset.organizations
             print(f"      Found {len(asset_orgs)} organization(s) for this asset.")
 
             # --- Fetching a Single Asset by ID ---
             print(f"\nFetching a single asset by its ID ('{example_asset.id}')...")
-            specific_asset = group.get_asset(asset_id=example_asset.id)
+            # Use the new method name for fetching a specific asset
+            specific_asset: Optional[Asset] = group.get_specific_asset(asset_id=example_asset.id)
             if specific_asset:
                 print(f"  Successfully fetched asset: '{specific_asset.name}'")
             else:
@@ -163,7 +162,7 @@ def main():
     # --- Important: Close the APIClient when done ---
     # This ensures background threads (like for concurrent API calls) are cleaned up.
     print("\nClosing the API client...")
-    group.api_client.close()
+    api_client.close() # Close the client instance created at the start
     print("API client closed. Script finished.")
 
 

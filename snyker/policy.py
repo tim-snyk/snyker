@@ -1,156 +1,195 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Dict, Optional, Tuple, Any
-from .utils import datetime_converter
+from typing import TYPE_CHECKING, List, Dict, Optional, Any, Tuple
 from datetime import datetime
 import logging
 
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
+
+from snyker.utils import datetime_converter
+
 if TYPE_CHECKING:
-    from .organization import Organization
     from .api_client import APIClient
+    from .organization import OrganizationPydanticModel
 
-class Policy:
-    """
-    Policy class to handle policies in Snyk and provide a consistent interface
-    for accessing policy data. Policies define rules and actions for issues
-    found by Snyk.
 
-    Attributes:
-        id (str): The unique identifier of the policy.
-        type (str): The type of the policy resource (usually 'policy').
-        name (str): The human-readable name of the policy.
-        raw (Dict[str, Any]): The raw JSON data for the policy from the Snyk API.
-        org (Organization): The Snyk Organization this policy belongs to.
-        api_client (APIClient): The API client instance for Snyk API interactions.
-        logger (logging.Logger): Logger instance for this policy.
-        created_at (Optional[datetime]): Timestamp of when the policy was created.
-        updated_at (Optional[datetime]): Timestamp of when the policy was last updated.
-        conditions_group (Policy.ConditionsGroup): The group of conditions for this policy.
-        action_type (Optional[str]): The type of action this policy performs (e.g., 'ignore').
-    """
-    def __init__(self,
-                 org: 'Organization',
-                 policy_data: Dict[str, Any],
-                 ):
-        """
-        Initializes a Policy object.
+class PolicyCondition(BaseModel):
+    """Represents a single condition within a Snyk policy."""
+    field: Optional[str] = None
+    operator: Optional[str] = None
+    value: Optional[Any] = None
+
+class PolicyConditionsGroup(BaseModel):
+    """Represents a group of conditions in a Snyk policy, combined by a logical operator."""
+    logical_operator: Optional[str] = Field(default=None, alias="logicalOperator")
+    conditions: List[PolicyCondition] = Field(default_factory=list)
+
+    @model_validator(mode='before')
+    @classmethod
+    def adapt_single_condition_to_list(cls, data: Any) -> Any:
+        """Adapts API response to ensure 'conditions' is always a list.
+
+        Snyk API might return a single condition dictionary or a list of them.
+        This validator also handles an older, flatter structure for backward
+        compatibility during parsing, converting it to the new list structure.
 
         Args:
-            org (Organization): The Snyk Organization this policy belongs to.
-                                It's used to derive API client and logging context.
-            policy_data (Dict[str, Any]): Raw dictionary data for the policy from the Snyk API.
+            data: The input data for validation.
 
-        Raises:
-            ValueError: If an APIClient context cannot be established via the `org` object.
-            KeyError: If essential keys are missing from `policy_data`.
+        Returns:
+            The (potentially) transformed data.
         """
-        try:
-            self.org: 'Organization' = org
-            
-            temp_api_client: Optional['APIClient'] = None
-            if org.group and hasattr(org.group, 'api_client') and org.group.api_client:
-                temp_api_client = org.group.api_client
-            elif hasattr(org, 'api_client') and org.api_client:
-                temp_api_client = org.api_client
-            
-            if temp_api_client:
-                self.api_client: 'APIClient' = temp_api_client
-                if hasattr(self.api_client, 'logger') and self.api_client.logger:
-                    self.logger: logging.Logger = self.api_client.logger
+        if isinstance(data, dict):
+            if 'conditions' in data and isinstance(data['conditions'], dict):
+                data['conditions'] = [data['conditions']]
+            elif 'field' in data and 'operator' in data and 'value' in data: # Legacy handling
+                condition_dict = {
+                    "field": data.pop('field'),
+                    "operator": data.pop('operator'),
+                    "value": data.pop('value')
+                }
+                if 'conditions' in data and isinstance(data['conditions'], list):
+                    data['conditions'].append(condition_dict)
                 else:
-                    self.logger = logging.getLogger(f"{__name__}.PolicyInstance.{policy_data.get('id','UnknownID')}")
-                    self.logger.warning(f"Policy for org {org.id}: APIClient found but has no logger. Policy created its own.")
-            else:
-                provisional_logger = logging.getLogger(f"{__name__}.PolicyInitError")
-                policy_id_for_log = policy_data.get('id', 'UnknownID')
-                org_id_for_log = getattr(org, 'id', 'UnknownOrgID')
-                provisional_logger.error(f"Policy (ID: {policy_id_for_log}) for org (ID: {org_id_for_log}) could not determine APIClient from org or org.group.")
-                raise ValueError(f"Policy for org {org_id_for_log} requires an APIClient context which could not be found.")
+                    data['conditions'] = [condition_dict]
+        return data
 
-            self.raw: Dict[str, Any] = policy_data
-            self.id: Optional[str] = policy_data.get('id')
-            self.type: Optional[str] = policy_data.get('type')
 
-            attributes = policy_data.get('attributes', {})
-            self.name: Optional[str] = attributes.get('name')
-            self.review: Optional[Any] = attributes.get('review')
-            
-            created_at_str = attributes.get('created_at')
-            self.created_at: Optional[datetime] = datetime_converter(created_at_str) if created_at_str else None
-            
-            updated_at_str = attributes.get('updated_at')
-            self.updated_at: Optional[datetime] = datetime_converter(updated_at_str) if updated_at_str else None
+class PolicyActionData(BaseModel):
+    """Data associated with a policy action, such as ignore details."""
+    ignore_type: Optional[str] = Field(default=None, alias="ignoreType")
+    expires: Optional[Any] = None
+    reason: Optional[str] = None
 
-            conditions_group_data = attributes.get('conditions_group', {})
-            self.conditions_group: Policy.ConditionsGroup = self.ConditionsGroup(conditions_group_data)
+    @field_validator('expires', mode='before')
+    @classmethod
+    def convert_expires_datetime(cls, value: Any) -> Optional[Any]:
+        """Converts 'expires' field to a datetime object."""
+        if value:
+            return datetime_converter(value)
+        return None
 
-            self.action_type: Optional[str] = attributes.get('action_type')
-            action_details = attributes.get('action', {}).get('data', {})
-            self.ignore_type: Optional[str] = action_details.get('ignore_type')
-            self.expires: Optional[datetime] = None
-            if self.ignore_type == 'temporary-ignore':
-                expires_str = action_details.get('expires')
-                if expires_str:
-                    self.expires = datetime_converter(expires_str)
-            self.reason: str = action_details.get('reason', '')
-            
-            created_by_data = attributes.get('created_by', {})
-            self.created_by_name: Optional[str] = created_by_data.get('name')
-            self.created_by_email: Optional[str] = created_by_data.get('email')
-            self.created_by_id: Optional[str] = created_by_data.get('id')
+class PolicyAction(BaseModel):
+    """Represents the action taken by a policy."""
+    data: Optional[PolicyActionData] = None
 
-        except KeyError as e:
-            logger_to_use = getattr(self, 'logger', logging.getLogger(__name__))
-            logger_to_use.error(f"KeyError initializing Policy: {e}. Policy data: {policy_data}", exc_info=True)
-            raise
-        except Exception as e:
-            logger_to_use = getattr(self, 'logger', logging.getLogger(__name__))
-            logger_to_use.error(f"Unexpected error initializing Policy: {e}. Policy data: {policy_data}", exc_info=True)
-            raise
+class PolicyCreatedBy(BaseModel):
+    """Information about the user who created the policy."""
+    name: Optional[str] = None
+    email: Optional[str] = None
+    id: Optional[str] = None
 
-        self.logger.debug(f"[Policy ID: {self.id}] Created policy object for '{self.name}'")
+class PolicyAttributes(BaseModel):
+    """Core attributes of a Snyk policy."""
+    name: Optional[str] = None
+    review: Optional[Any] = None
+    created_at: Optional[Any] = Field(default=None, alias="createdAt")
+    updated_at: Optional[Any] = Field(default=None, alias="updatedAt")
+    conditions_group: Optional[PolicyConditionsGroup] = Field(default=None, alias="conditionsGroup")
+    action_type: Optional[str] = Field(default=None, alias="actionType")
+    action: Optional[PolicyAction] = None
+    created_by: Optional[PolicyCreatedBy] = Field(default=None, alias="createdBy")
 
-    class ConditionsGroup:
+    @field_validator('created_at', 'updated_at', mode='before')
+    @classmethod
+    def convert_datetimes(cls, value: Any) -> Optional[Any]:
+        """Converts string datetime fields to datetime objects."""
+        if value:
+            return datetime_converter(value)
+        return None
+
+class PolicyPydanticModel(BaseModel):
+    """Represents a Snyk security policy.
+
+    Attributes:
+        id: The unique identifier of the policy.
+        type: The type of the Snyk entity (should be "policy").
+        attributes: Detailed attributes of the policy.
+    """
+    id: str
+    type: str
+    attributes: PolicyAttributes
+
+    _api_client: APIClient = PrivateAttr()
+    _organization: OrganizationPydanticModel = PrivateAttr()
+    _logger: logging.Logger = PrivateAttr()
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    @classmethod
+    def from_api_response(cls,
+                          policy_data: Dict[str, Any],
+                          api_client: APIClient,
+                          organization: OrganizationPydanticModel
+                          ) -> PolicyPydanticModel:
+        """Creates a PolicyPydanticModel instance from API response data.
+
+        Args:
+            policy_data: The 'data' part of an API item representing a policy.
+            api_client: An instance of the APIClient.
+            organization: The parent OrganizationPydanticModel instance.
+
+        Returns:
+            An initialized PolicyPydanticModel instance.
         """
-        Represents the group of conditions that define when a Snyk policy applies.
-        In some Snyk API versions/endpoints, this might be limited in complexity
-        (e.g., only a single condition).
+        instance = cls(**policy_data)
+        instance._api_client = api_client
+        instance._organization = organization
+        instance._logger = api_client.logger
 
-        Attributes:
-            logical_operator (Optional[str]): The logical operator combining conditions
-                                             (e.g., 'and', 'or').
-            conditions (List[Tuple[str, str, str]]): A list of conditions, where each
-                                                     condition is a tuple, typically
-                                                     (field, operator, value).
-                                                     Currently, this list is initialized empty
-                                                     as specific fields (field, operator, value)
-                                                     are parsed from the first condition directly.
-            field (Optional[str]): The field the condition applies to (e.g., 'snyk/asset/finding/v1').
-            operator (Optional[str]): The operator for the condition (e.g., 'includes').
-            value (Optional[Any]): The value to check against.
-        """
-        def __init__(self, conditions_group_data: Dict[str, Any]):
-            """
-            Initializes a ConditionsGroup object.
+        instance._logger.debug(f"[Policy ID: {instance.id}] Created policy object for '{instance.name}'")
+        return instance
 
-            Args:
-                conditions_group_data (Dict[str, Any]): Raw dictionary data for the
-                                                        conditions group from the Snyk API.
-            """
-            self.logical_operator: Optional[str] = conditions_group_data.get('logical_operator')
-            self.conditions: List[Tuple[str, str, str]] = []
+    @property
+    def name(self) -> Optional[str]:
+        """The name of the policy."""
+        return self.attributes.name
 
-            conditions_list = conditions_group_data.get('conditions', [])
-            if conditions_list and isinstance(conditions_list, list) and len(conditions_list) > 0:
-                condition_data = conditions_list[0]
-                if isinstance(condition_data, dict):
-                    self.field: Optional[str] = condition_data.get('field')
-                    self.operator: Optional[str] = condition_data.get('operator')
-                    self.value: Optional[Any] = condition_data.get('value')
-                else:
-                    self.field = None
-                    self.operator = None
-                    self.value = None
-            else:
-                self.field = None
-                self.operator = None
-                self.value = None
+    @property
+    def created_at(self) -> Optional[datetime]:
+        """The creation timestamp of the policy."""
+        return self.attributes.created_at if isinstance(self.attributes.created_at, datetime) else None
+
+    @property
+    def updated_at(self) -> Optional[datetime]:
+        """The last update timestamp of the policy."""
+        return self.attributes.updated_at if isinstance(self.attributes.updated_at, datetime) else None
+
+    @property
+    def conditions_group(self) -> Optional[PolicyConditionsGroup]:
+        """The group of conditions that define when this policy applies."""
+        return self.attributes.conditions_group
+
+    @property
+    def action_type(self) -> Optional[str]:
+        """The type of action this policy performs (e.g., 'ignore')."""
+        return self.attributes.action_type
+
+    @property
+    def ignore_type(self) -> Optional[str]:
+        """If the action is 'ignore', this specifies the type of ignore (e.g., 'not-vulnerable')."""
+        if self.attributes.action and self.attributes.action.data:
+            return self.attributes.action.data.ignore_type
+        return None
+
+    @property
+    def expires(self) -> Optional[datetime]:
+        """If the action is 'ignore', this is the expiration date of the ignore."""
+        if self.attributes.action and self.attributes.action.data and \
+           isinstance(self.attributes.action.data.expires, datetime):
+            return self.attributes.action.data.expires
+        return None
+
+    @property
+    def reason(self) -> Optional[str]:
+        """The reason provided for this policy action (e.g., reason for an ignore)."""
+        if self.attributes.action and self.attributes.action.data:
+            return self.attributes.action.data.reason
+        return None
+
+    @property
+    def created_by_name(self) -> Optional[str]:
+        """The name of the user who created this policy."""
+        if self.attributes.created_by:
+            return self.attributes.created_by.name
+        return None

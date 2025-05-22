@@ -1,425 +1,342 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Dict, Optional, Tuple, Any
-from .utils import datetime_converter
+from typing import TYPE_CHECKING, List, Dict, Optional, Any
 import logging
-import json
+import json # For potential debugging, though Pydantic handles serialization
+
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
+
+from snyker.utils import datetime_converter
+from snyker.config import API_CONFIG
 
 if TYPE_CHECKING:
     from .api_client import APIClient
-    from .organization import Organization
-    from .asset import Asset
-    from .project import Project
-    from .group import Group
+    from .organization import OrganizationPydanticModel
+    from .project import ProjectPydanticModel
+    from .group import GroupPydanticModel
 
-class Issue:
+
+class IssueCoordinateRepresentation(BaseModel):
+    """Represents one way an issue is identified at a specific location.
+    
+    This can include package information, file paths, or commit details.
     """
-    Represents a Snyk Issue, such as a vulnerability, license compliance problem,
-    or code quality finding.
+    resource_path: Optional[str] = Field(default=None, alias="resourcePath")
+    package_name: Optional[str] = Field(default=None, alias="packageName")
+    package_version: Optional[str] = Field(default=None, alias="packageVersion")
+    commit_id: Optional[str] = None
+    file: Optional[str] = None
+    start_line: Optional[int] = None
+    start_column: Optional[int] = None
+    end_line: Optional[int] = None
+    end_column: Optional[int] = None
 
-    This class encapsulates the data for an issue as returned by the Snyk API.
-    It provides access to various attributes of the issue and includes nested
-    classes to structure complex data like coordinates, severities, and risk factors.
-    An Issue object is typically associated with a Project, Organization, or Group.
-
-    Attributes:
-        id (str): The unique identifier of the issue.
-        type (str): The type of the issue (e.g., 'vuln', 'license').
-        title (str): A human-readable title for the issue.
-        effective_severity_level (str): The calculated severity of the issue.
-        status (str): The current status of the issue (e.g., 'open', 'resolved').
-        raw (Dict[str, Any]): The raw JSON data for the issue from the Snyk API.
-        api_client (Optional[APIClient]): The API client for further calls.
-        project (Optional[Project]): The Snyk Project this issue belongs to.
-        org (Optional[Organization]): The Snyk Organization this issue belongs to.
-        group (Optional[Group]): The Snyk Group this issue belongs to.
-        logger (logging.Logger): Logger instance.
-        coordinates (List[Issue.Coordinate]): Details on where the issue manifests.
-        classes (List[Issue.Classes]): Classifications (e.g., CWEs).
-        severities (List[Issue.Severities]): Detailed severity information.
-        risk (Optional[Issue.Risk]): Risk assessment details.
-    """
-    def __init__(self,
-                 issue_data: Dict[str, Any],
-                 group: Optional['Group'] = None,
-                 org: Optional['Organization'] = None,
-                 project: Optional['Project'] = None,
-                 ):
-        """
-        Initializes an Issue object.
-
-        The issue must be contextualized by at least one of `group`, `org`, or `project`.
-        The constructor parses `issue_data` to populate the issue's attributes and
-        instantiates nested objects for structured data.
-
-        Args:
-            issue_data (Dict[str, Any]): Raw dictionary data for the issue from Snyk API.
-            group (Optional['Group']): The parent Snyk Group.
-            org (Optional['Organization']): The parent Snyk Organization.
-            project (Optional['Project']): The parent Snyk Project.
-
-        Raises:
-            ValueError: If none of `group`, `org`, or `project` are provided.
-            KeyError: If essential keys are missing from `issue_data`.
-        """
-        self.project: Optional['Project'] = None
-        self.org: Optional['Organization'] = None
-        self.group: Optional['Group'] = None
-        self.api_client: Optional['APIClient'] = None
-        
-        _logger_source_name = "UnknownContext"
-        if project and hasattr(project, 'logger') and project.logger:
-            self.logger = project.logger
-            _logger_source_name = f"Project:{project.id}"
-        elif org and hasattr(org, 'logger') and org.logger:
-            self.logger = org.logger
-            _logger_source_name = f"Org:{org.id}"
-        elif group and hasattr(group, 'logger') and group.logger:
-            self.logger = group.logger
-            _logger_source_name = f"Group:{group.id}"
-        else:
-            self.logger = logging.getLogger(f"{__name__}.IssueInstance")
-            self.logger.warning("No logger provided by context; Issue created its own.")
-
-        if group is None and org is None and project is None:
-            raise ValueError("Issue must be created with Group, Organization, or Project context.")
-
-        # Establish context hierarchy and API client
-        if project is not None:
-            self.project = project
-            if hasattr(project, 'organization') and project.organization:
-                self.org = project.organization
-                if hasattr(self.org, 'group') and self.org.group:
-                    self.group = self.org.group
-            if hasattr(project, 'api_client') and project.api_client:
-                 self.api_client = project.api_client
-        elif org is not None:
-            self.org = org
-            if hasattr(org, 'group') and org.group:
-                self.group = org.group
-            if hasattr(org, 'api_client') and org.api_client:
-                self.api_client = org.api_client
-        elif group is not None:
-            self.group = group
-            if hasattr(group, 'api_client') and group.api_client:
-                self.api_client = group.api_client
-        
-        # Fallback to group's API client if not set via more specific context
-        if self.api_client is None and self.group and hasattr(self.group, 'api_client'):
-            self.api_client = self.group.api_client
-        
-        if self.api_client is None:
-            self.logger.warning(f"Issue {issue_data.get('id', 'UnknownID')} initialized without an APIClient.")
-
-
-        self.raw = issue_data
-        try:
-            self.id = self.raw['id']
-            self.type = self.raw['type']
-            attributes = issue_data.get('attributes', {})
-            self.created_at = datetime_converter(attributes['created_at'])
-            self.updated_at = datetime_converter(attributes['updated_at'])
-            self.title = attributes['title']
-            self.effective_severity_level = attributes['effective_severity_level']
-            self.ignored = bool(attributes.get('ignored', False))
-            self.key = attributes.get('key')
-            self.status = attributes['status']
-        except KeyError as e:
-            self.logger.error(f"KeyError initializing Issue: {e}. Raw data: {json.dumps(self.raw, indent=2)}")
-            raise KeyError(f"Missing essential key in issue data: {e}") from e
+    @model_validator(mode='before')
+    @classmethod
+    def extract_nested_fields(cls, data: Any) -> Any:
+        """Flattens nested 'dependency' and 'sourceLocation' fields from API response."""
+        if isinstance(data, dict):
+            dependency_info = data.pop('dependency', {})
+            if dependency_info:
+                data['packageName'] = dependency_info.get('package_name')
+                data['packageVersion'] = dependency_info.get('package_version')
             
-        self.key_asset = attributes.get('key_asset')
-        self.tool = attributes.get('tool')
-        if self.status == 'resolved' and 'resolution' in attributes:
-            self.resolved_at = datetime_converter(attributes['resolution']['resolved_at'])
-            self.resolution_type = attributes['resolution']['type']
-        
-        # Parse nested structures
-        self.coordinates: List[Issue.Coordinate] = []
-        if 'coordinates' in attributes and isinstance(attributes['coordinates'], list):
-             for coord_data in attributes['coordinates']:
-                self.coordinates.append(self.Coordinate(coord_data, parent_logger=self.logger))
+            source_location = data.pop('sourceLocation', {})
+            if isinstance(source_location, dict):
+                data['commit_id'] = source_location.get('commit_id')
+                data['file'] = source_location.get('file')
+                region = source_location.get('region', {})
+                if isinstance(region, dict):
+                    start_info = region.get('start', {})
+                    end_info = region.get('end', {})
+                    data['start_line'] = start_info.get('line') if isinstance(start_info, dict) else None
+                    data['start_column'] = start_info.get('column') if isinstance(start_info, dict) else None
+                    data['end_line'] = end_info.get('line') if isinstance(end_info, dict) else None
+                    data['end_column'] = end_info.get('column') if isinstance(end_info, dict) else None
+        return data
 
-        self.classes: List[Issue.Classes] = []
-        if 'classes' in attributes and isinstance(attributes['classes'], list):
-            for class_data in attributes['classes']:
-                self.classes.append(self.Classes(class_data, parent_logger=self.logger))
-        
-        self.risk: Optional[Issue.Risk] = None # Can be singular
-        if 'risk' in attributes and isinstance(attributes['risk'], dict):
-            self.risk = self.Risk(attributes['risk'], parent_logger=self.logger)
-        
-        self.severities: List[Issue.Severities] = []
-        if 'severities' in attributes and isinstance(attributes['severities'], list):
-            for severity_data in attributes['severities']:
-                self.severities.append(self.Severities(severity_data, parent_logger=self.logger))
-        
-        # Parse relationships
-        relationships = issue_data.get('relationships', {})
-        if 'organization' in relationships:
-            self.org_id = relationships['organization'].get('data', {}).get('id')
-        if 'scan_item' in relationships:
-            scan_item_data = relationships['scan_item'].get('data', {})
-            if scan_item_data.get('type') == 'project':
-                self.project_id = scan_item_data.get('id')
-            elif scan_item_data.get('type') == 'environment':
-                self.environment_id = scan_item_data.get('id')
-        if 'ignore' in relationships:
-            self.ignore_id = relationships['ignore'].get('data', {}).get('id')
-        
-        self.logger.debug(f"[{_logger_source_name}] Issue {self.id} ('{self.title}') initialized.")
+class IssueCoordinate(BaseModel):
+    """Defines the location and fixability of an issue."""
+    representations: List[IssueCoordinateRepresentation] = Field(default_factory=list)
+    remedies: List[Dict[str, Any]] = Field(default_factory=list)
+    is_fixable_manually: bool = Field(default=False, alias="isFixableManually")
+    is_fixable_snyk: bool = Field(default=False, alias="isFixableSnyk")
+    is_fixable_upstream: Optional[bool] = Field(default=None, alias="isFixableUpstream")
+    is_patchable: Optional[bool] = Field(default=None, alias="isPatchable")
+    is_pinnable: Optional[bool] = Field(default=None, alias="isPinnable")
+    is_upgradeable: Optional[bool] = Field(default=None, alias="isUpgradeable")
+    reachability: Optional[str] = None
 
-    def get_project(self) -> Optional['Project']:
-        """
-        Lazily fetches and returns the full Project object associated with this issue.
+class IssueProblem(BaseModel):
+    """Details about a specific problem associated with an issue (e.g., a CWE)."""
+    id: str
+    type: Optional[str] = None
+    source: Optional[str] = None
+    updated_at: Optional[Any] = Field(default=None, alias="updatedAt") 
+    disclosed_at: Optional[Any] = Field(default=None, alias="disclosedAt")
+    discovered_at: Optional[Any] = Field(default=None, alias="discoveredAt")
+    url: Optional[str] = None
 
-        This method attempts to retrieve the project if `self.project_id` and
-        `self.org` (Organization context) are available. The fetched Project
-        object is cached in `self.project`.
-
-        Returns:
-            Optional['Project']: The associated Project object, or None if it cannot be fetched.
-        """
-        if self.project: 
-            return self.project
-        
-        if hasattr(self, 'project_id') and self.project_id and self.org:
-            self.logger.debug(f"[Issue ID: {self.id}] Attempting to fetch Project object for project_id: {self.project_id}")
-            try:
-                project_obj = self.org.get_project(project_id=self.project_id)
-                if project_obj:
-                    self.project = project_obj
-                    return self.project
-                else:
-                    self.logger.warning(f"[Issue ID: {self.id}] Failed to fetch Project object for project_id: {self.project_id} from org {self.org.id}")
-            except Exception as e:
-                self.logger.error(f"[Issue ID: {self.id}] Error fetching Project object for project_id: {self.project_id}: {e}", exc_info=True)
-        elif not hasattr(self, 'project_id') or not self.project_id:
-            self.logger.debug(f"[Issue ID: {self.id}] No project_id available to fetch Project object.")
-        elif not self.org:
-            self.logger.debug(f"[Issue ID: {self.id}] No organization context (self.org) available to fetch Project object.")
-            
+    @field_validator('updated_at', 'disclosed_at', 'discovered_at', mode='before')
+    @classmethod
+    def convert_datetimes(cls, value: Any) -> Optional[Any]:
+        """Converts string datetime fields to datetime objects."""
+        if value:
+            return datetime_converter(value)
         return None
 
-    class Coordinate:
-        """
-        Represents the coordinates of an issue, detailing where it manifests.
-        This could include file paths, dependency information, or specific code locations.
+class IssueSeverity(BaseModel):
+    """Severity information for an issue."""
+    level: Optional[str] = None
+    modification_time: Optional[Any] = Field(default=None, alias="modificationTime")
+    score: Optional[float] = None
+    source: Optional[str] = None
+    vector: Optional[str] = None
+    version: Optional[str] = None
 
-        Attributes:
-            representations (List[Issue.Coordinate.Representation]): Specific manifestations.
-            remedies (List[Dict[str, Any]]): Suggested remedies or fixes.
-            is_fixable_manually (bool): If the issue can be fixed manually.
-            is_fixable_snyk (bool): If Snyk can provide an automated fix.
-            reachability (Optional[str]): Information about the issue's reachability.
-        """
-        def __init__(self, coordinate_data: Dict[str, Any], parent_logger: Optional[logging.Logger] = None):
-            self.logger = parent_logger or logging.getLogger(f"{__name__}.Coordinate")
-            self.raw_coordinate_data = coordinate_data
+    @field_validator('modification_time', mode='before')
+    @classmethod
+    def convert_mod_time(cls, value: Any) -> Optional[Any]:
+        """Converts modification_time to a datetime object."""
+        if value:
+            return datetime_converter(value)
+        return None
 
-            self.representations: List[Issue.Coordinate.Representation] = []
-            if 'representations' in coordinate_data and isinstance(coordinate_data['representations'], list):
-                for rep_data in coordinate_data['representations']:
-                    self.representations.append(self.Representation(rep_data, parent_logger=self.logger))
-            
-            self.remedies: List[Dict[str, Any]] = coordinate_data.get('remedies', [])
-            
-            self.is_fixable_manually = bool(coordinate_data.get('is_fixable_manually'))
-            self.is_fixable_snyk = bool(coordinate_data.get('is_fixable_snyk'))
-            self.is_fixable_upstream = bool(coordinate_data.get('is_fixable_upstream'))
-            self.is_patchable = bool(coordinate_data.get('is_patchable'))
-            self.is_pinnable = bool(coordinate_data.get('is_pinnable'))
-            self.is_upgradeable = bool(coordinate_data.get('is_upgradeable'))
-            self.reachability = coordinate_data.get('reachability')
-            
-        class Representation:
-            """
-            A specific representation or instance of an issue's coordinate.
-            For example, a vulnerability might have multiple representations if it
-            appears in different files or through different dependency paths.
+class IssueClass(BaseModel):
+    """Classification of an issue (e.g., CWE)."""
+    id: Optional[str] = None
+    source: Optional[str] = None
+    type: Optional[str] = None
+    url: Optional[str] = None
 
-            Attributes:
-                resource_path (Optional[str]): Path to the affected resource.
-                package_name (Optional[str]): Name of the affected package.
-                package_version (Optional[str]): Version of the affected package.
-                source_location (Optional[Dict[str, Any]]): Raw source location data.
-                commit_id (Optional[str]): Commit ID if applicable.
-                file (Optional[str]): File path.
-                start_line (Optional[int]): Start line number.
-                # ... and other location details ...
-            """
-            def __init__(self, rep_data: Dict[str, Any], parent_logger: Optional[logging.Logger] = None):
-                self.logger = parent_logger or logging.getLogger(f"{__name__}.Representation")
-                self.raw_rep_data = rep_data
+class IssueRiskFactor(BaseModel):
+    """A specific risk factor contributing to an issue's overall risk."""
+    name: Optional[str] = None
+    value: Optional[bool] = None
+    updated_at: Optional[Any] = Field(default=None, alias="updatedAt")
+    included_in_score: bool = Field(default=False, alias="includedInScore")
+    links: List[str] = Field(default_factory=list)
 
-                self.resource_path = rep_data.get('resourcePath')
-                dependency_info = rep_data.get('dependency', {})
-                self.package_name = dependency_info.get('package_name')
-                self.package_version = dependency_info.get('package_version')
-                
-                self.source_location = rep_data.get('sourceLocation')
-                if isinstance(self.source_location, dict):
-                    self.commit_id = self.source_location.get('commit_id')
-                    self.file = self.source_location.get('file')
-                    region = self.source_location.get('region', {})
-                    if isinstance(region, dict):
-                        start_info = region.get('start', {})
-                        end_info = region.get('end', {})
-                        self.start_line = start_info.get('line') if isinstance(start_info, dict) else None
-                        self.start_column = start_info.get('column') if isinstance(start_info, dict) else None
-                        self.end_line = end_info.get('line') if isinstance(end_info, dict) else None
-                        self.end_column = end_info.get('column') if isinstance(end_info, dict) else None
-                    else:
-                        self.start_line = self.start_column = self.end_line = self.end_column = None
-                else:
-                    self.commit_id = self.file = None
-                    self.start_line = self.start_column = self.end_line = self.end_column = None
+    @field_validator('updated_at', mode='before')
+    @classmethod
+    def convert_update_time(cls, value: Any) -> Optional[Any]:
+        """Converts updated_at to a datetime object."""
+        if value:
+            return datetime_converter(value)
+        return None
+        
+    @model_validator(mode='before')
+    @classmethod
+    def extract_links(cls, data: Any) -> Any:
+        """Extracts links from 'evidence' field if present."""
+        if isinstance(data, dict):
+            evidence = data.pop('evidence', None)
+            links_list = []
+            if evidence:
+                if isinstance(evidence, str):
+                    links_list.append(evidence)
+                elif isinstance(evidence, dict) and 'href' in evidence:
+                    links_list.append(evidence['href'])
+                elif isinstance(evidence, list):
+                    for link_item in evidence:
+                        if isinstance(link_item, str):
+                            links_list.append(link_item)
+                        elif isinstance(link_item, dict) and 'href' in link_item:
+                            links_list.append(link_item['href'])
+            if links_list:
+                 data['links'] = links_list
+        return data
 
 
-    class Problems:
-        """
-        Details about the underlying problem or vulnerability associated with an issue.
-        Often contains identifiers like CVE, CWE, or Snyk vulnerability ID.
+class IssueRisk(BaseModel):
+    """Overall risk assessment for an issue."""
+    factors: List[IssueRiskFactor] = Field(default_factory=list)
+    score: Optional[float] = None
+    model: Optional[str] = None
 
-        Attributes:
-            id (str): The identifier of the problem (e.g., CVE-2021-12345).
-            type (str): The type of problem identifier (e.g., 'cve', 'snyk').
-            source (str): The source of the problem data (e.g., 'NVD', 'Snyk').
-            updated_at (datetime): When this problem information was last updated.
-            disclosed_at (Optional[datetime]): When the problem was publicly disclosed.
-            discovered_at (Optional[datetime]): When Snyk discovered this problem.
-            url (Optional[str]): A URL for more information about the problem.
-        """
-        def __init__(self, problem_data: Dict[str, Any], parent_logger: Optional[logging.Logger] = None):
-            self.logger = parent_logger or logging.getLogger(f"{__name__}.Problems")
-            self.raw_problem_data = problem_data
-
-            self.id = problem_data['id']
-            self.type = problem_data.get('type')
-            self.source = problem_data['source']
-            
-            if 'updated_at' in problem_data:
-                 self.updated_at = datetime_converter(problem_data['updated_at'])
-            else:
-                self.updated_at = None
-                self.logger.warning("Problem data missing 'updated_at'")
-
-            if 'disclosed_at' in problem_data:
-                self.disclosed_at = datetime_converter(problem_data['disclosed_at'])
-            else:
-                self.disclosed_at = None
-            if 'discovered_at' in problem_data:
-                self.discovered_at = datetime_converter(problem_data['discovered_at'])
-            else:
-                self.discovered_at = None
-            self.url = problem_data.get('url')
-
-    class Severities:
-        """
-        Represents a single severity assessment for an issue.
-        An issue might have multiple severity scores from different sources or versions.
-
-        Attributes:
-            level (str): The severity level (e.g., 'high', 'medium', 'low').
-            modification_time (datetime): Timestamp of when this severity was set/modified.
-            score (Optional[float]): Numerical score (e.g., CVSS score).
-            source (str): The source of this severity assessment (e.g., 'Snyk', 'NVD').
-            vector (Optional[str]): The CVSS vector string, if applicable.
-            version (Optional[str]): The version of the scoring system (e.g., 'CVSS:3.1').
-        """
-        def __init__(self, severity_data: Dict[str, Any], parent_logger: Optional[logging.Logger] = None):
-            self.logger = parent_logger or logging.getLogger(f"{__name__}.Severities")
-            self.raw_severity_data = severity_data
-
-            self.level = severity_data.get('level')
-            if 'modification_time' in severity_data:
-                self.modification_time = datetime_converter(severity_data['modification_time'])
-            else:
-                self.modification_time = None
-                self.logger.warning("Severity data missing 'modification_time'")
-            self.score = severity_data.get('score')
-            self.source = severity_data.get('source')
-            self.vector = severity_data.get('vector')
-            self.version = severity_data.get('version')
-            
-    class Classes:
-        """
-        Represents a classification for an issue, such as a CWE (Common Weakness Enumeration).
-
-        Attributes:
-            id (str): The identifier of the classification (e.g., 'CWE-79').
-            source (str): The source of the classification (e.g., 'CWE').
-            type (str): The type of classification.
-            url (Optional[str]): A URL for more information about this classification.
-        """
-        def __init__(self, classes_data: Dict[str, Any], parent_logger: Optional[logging.Logger] = None):
-            self.logger = parent_logger or logging.getLogger(f"{__name__}.Classes")
-            self.raw_classes_data = classes_data
-
-            self.id = classes_data.get('id')
-            self.source = classes_data.get('source')
-            self.type = classes_data.get('type')
-            self.url = classes_data.get('url')
-
-    class Risk:
-        """
-        Encapsulates risk assessment details for an issue, including factors and overall score.
-
-        Attributes:
-            factors (List[Issue.Risk.Factor]): A list of individual risk factors.
-            score (Optional[float]): The calculated risk score.
-            model (Optional[str]): The model used for risk calculation.
-        """
-        def __init__(self, risk_data: Dict[str, Any], parent_logger: Optional[logging.Logger] = None):
-            self.logger = parent_logger or logging.getLogger(f"{__name__}.Risk")
-            self.raw_risk_data = risk_data
-
-            self.factors: List[Issue.Risk.Factor] = []
-            if 'factors' in risk_data and isinstance(risk_data['factors'], list):
-                for factor_data in risk_data['factors']:
-                    self.factors.append(self.Factor(factor_data, parent_logger=self.logger))
-            
-            score_data = risk_data.get('score', {})
+    @model_validator(mode='before')
+    @classmethod
+    def extract_score_model(cls, data: Any) -> Any:
+        """Extracts 'score' and 'model' from a nested score object."""
+        if isinstance(data, dict):
+            score_data = data.pop('score', {})
             if isinstance(score_data, dict):
-                self.score = score_data.get('value')
-                self.model = score_data.get('model')
+                data['score'] = score_data.get('value')
+                data['model'] = score_data.get('model')
+        return data
+
+class IssueAttributes(BaseModel):
+    """Core attributes of a Snyk issue."""
+    created_at: Optional[Any] = Field(default=None, alias="createdAt")
+    updated_at: Optional[Any] = Field(default=None, alias="updatedAt")
+    title: str 
+    effective_severity_level: Optional[str] = Field(default=None, alias="effectiveSeverityLevel")
+    ignored: bool = Field(default=False)
+    key: Optional[str] = None
+    status: str
+    key_asset: Optional[str] = Field(default=None, alias="keyAsset")
+    tool: Optional[str] = None
+    
+    resolved_at: Optional[Any] = Field(default=None, alias="resolvedAt")
+    resolution_type: Optional[str] = Field(default=None, alias="resolutionType")
+
+    coordinates: List[IssueCoordinate] = Field(default_factory=list)
+    classes: List[IssueClass] = Field(default_factory=list)
+    risk: Optional[IssueRisk] = None
+    severities: List[IssueSeverity] = Field(default_factory=list)
+    problems: List[IssueProblem] = Field(default_factory=list)
+
+    @field_validator('created_at', 'updated_at', 'resolved_at', mode='before')
+    @classmethod
+    def convert_datetimes(cls, value: Any) -> Optional[Any]:
+        """Converts string datetime fields to datetime objects."""
+        if value:
+            return datetime_converter(value)
+        return None
+
+    @model_validator(mode='before')
+    @classmethod
+    def extract_resolution(cls, data: Any) -> Any:
+        """Extracts resolution fields from a nested 'resolution' object."""
+        if isinstance(data, dict):
+            resolution_data = data.pop('resolution', {})
+            if isinstance(resolution_data, dict):
+                data['resolvedAt'] = resolution_data.get('resolved_at')
+                data['resolutionType'] = resolution_data.get('type')
+        return data
+
+class RelationshipData(BaseModel):
+    """Generic model for relationship data (ID and type)."""
+    id: Optional[str] = None
+    type: Optional[str] = None
+
+class IssueRelationships(BaseModel):
+    """Relationships of a Snyk issue to other entities."""
+    organization: Optional[RelationshipData] = None
+    scan_item: Optional[RelationshipData] = Field(default=None, alias="scanItem")
+    ignore: Optional[RelationshipData] = None
+
+class IssuePydanticModel(BaseModel):
+    """Represents a Snyk issue.
+
+    Attributes:
+        id: The unique identifier of the issue.
+        type: The type of the Snyk entity (should be "issue").
+        attributes: Detailed attributes of the issue.
+        relationships: Relationships to other Snyk entities like organization or scan_item.
+    """
+    id: str
+    type: str
+    attributes: IssueAttributes
+    relationships: Optional[IssueRelationships] = None
+
+    _api_client: APIClient = PrivateAttr()
+    _organization: Optional[OrganizationPydanticModel] = PrivateAttr(default=None)
+    _project: Optional[ProjectPydanticModel] = PrivateAttr(default=None)
+    _group: Optional[GroupPydanticModel] = PrivateAttr(default=None)
+    _logger: logging.Logger = PrivateAttr()
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    @classmethod
+    def from_api_response(cls,
+                          issue_data: Dict[str, Any],
+                          api_client: APIClient,
+                          organization: Optional[OrganizationPydanticModel] = None,
+                          project: Optional[ProjectPydanticModel] = None,
+                          group: Optional[GroupPydanticModel] = None
+                          ) -> IssuePydanticModel:
+        """Creates an IssuePydanticModel instance from API response data.
+
+        Args:
+            issue_data: The 'data' part of an API item representing an issue.
+            api_client: An instance of the APIClient.
+            organization: The parent OrganizationPydanticModel instance, if applicable.
+            project: The parent ProjectPydanticModel instance, if applicable.
+            group: The parent GroupPydanticModel instance, if applicable.
+
+        Returns:
+            An instance of IssuePydanticModel.
+        """
+        instance = cls(**issue_data)
+        instance._api_client = api_client
+        instance._organization = organization
+        instance._project = project
+        instance._group = group
+        instance._logger = api_client.logger
+
+        instance._logger.debug(f"[Issue ID: {instance.id}] Created issue object for '{instance.title}'")
+        
+        if API_CONFIG.get("loading_strategy") == "eager" and not instance._project:
+            instance._fetch_project_if_needed()
+
+        return instance
+
+    @property
+    def title(self) -> str:
+        """The title of the issue."""
+        return self.attributes.title
+
+    @property
+    def effective_severity_level(self) -> Optional[str]:
+        """The effective severity level of the issue (e.g., 'high', 'medium')."""
+        return self.attributes.effective_severity_level
+
+    @property
+    def status(self) -> str:
+        """The current status of the issue (e.g., 'open', 'resolved')."""
+        return self.attributes.status
+        
+    @property
+    def project(self) -> Optional[ProjectPydanticModel]:
+        """The Snyk project associated with this issue.
+        
+        Fetched lazily or eagerly based on SDK configuration.
+        """
+        if self._project is None:
+            if API_CONFIG.get("loading_strategy") == "lazy":
+                self._fetch_project_if_needed()
+        return self._project
+
+    def _fetch_project_if_needed(self) -> None:
+        """Internal method to fetch the related project if not already loaded.
+        
+        This is typically called by the `project` property during lazy loading.
+        """
+        if self._project:
+            return
+
+        project_id: Optional[str] = None
+        org_for_project_fetch: Optional[OrganizationPydanticModel] = self._organization
+
+        if self.relationships and self.relationships.scan_item and \
+           self.relationships.scan_item.type == 'project':
+            project_id = self.relationships.scan_item.id
+        
+        if not org_for_project_fetch and self.relationships and self.relationships.organization:
+            org_id_from_rel = self.relationships.organization.id if self.relationships.organization else None
+            if org_id_from_rel:
+                self._logger.debug(f"[Issue ID: {self.id}] Attempting to get Organization context (ID: {org_id_from_rel}) for project fetch.")
+                if self._group:
+                    org_for_project_fetch = self._group.get_organization_by_id(org_id_from_rel)
             else:
-                self.score = None
-                self.model = None
+                self._logger.debug(f"[Issue ID: {self.id}] No organization ID in relationships to fetch Organization context.")
 
-        class Factor:
-            """
-            Represents an individual factor contributing to an issue's risk assessment.
 
-            Attributes:
-                name (str): Name of the risk factor (e.g., 'hasFix', 'exploitMaturity').
-                value (bool): The boolean value of this factor.
-                updated_at (datetime): When this factor was last updated.
-                included_in_score (bool): Whether this factor was included in the score.
-                links (List[str]): URLs or references related to this factor's evidence.
-            """
-            def __init__(self, factor_data: Dict[str, Any], parent_logger: Optional[logging.Logger] = None):
-                self.logger = parent_logger or logging.getLogger(f"{__name__}.Factor")
-                self.raw_factor_data = factor_data
-
-                self.included_in_score = bool(factor_data.get('included_in_score', False))
-                self.name = factor_data.get('name')
-                if 'updated_at' in factor_data:
-                    self.updated_at = datetime_converter(factor_data['updated_at'])
+        if project_id and org_for_project_fetch:
+            self._logger.debug(f"[Issue ID: {self.id}] Lazily fetching Project (ID: {project_id}) via Org (ID: {org_for_project_fetch.id}).")
+            try:
+                project_model = org_for_project_fetch.get_specific_project(project_id=project_id)
+                if project_model:
+                    self._project = project_model
                 else:
-                    self.updated_at = None
-                    self.logger.warning(f"Risk factor data missing 'updated_at' for factor '{self.name}'")
-                self.value = bool(factor_data.get('value'))
-                
-                self.links: List[str] = []
-                evidence = factor_data.get('evidence')
-                if evidence:
-                    if isinstance(evidence, str):
-                        self.links.append(evidence)
-                    elif isinstance(evidence, dict) and 'href' in evidence:
-                        self.links.append(evidence['href'])
-                    elif isinstance(evidence, list):
-                        for link_item in evidence:
-                            if isinstance(link_item, str):
-                                self.links.append(link_item)
-                            elif isinstance(link_item, dict) and 'href' in link_item:
-                                self.links.append(link_item['href'])
+                    self._logger.warning(f"[Issue ID: {self.id}] Failed to fetch Project (ID: {project_id}). Project model was None.")
+            except Exception as e:
+                self._logger.error(f"[Issue ID: {self.id}] Error fetching Project (ID: {project_id}): {e}", exc_info=True)
+        elif not project_id:
+             self._logger.warning(
+                 f"[Issue ID: {self.id}] No project_id in relationships to fetch Project. "
+                 f"Relationships data: {self.relationships.model_dump_json(indent=2) if self.relationships else 'None'}"
+            )
+        elif not org_for_project_fetch:
+             self._logger.warning(f"[Issue ID: {self.id}] No Organization context to fetch Project (ID: {project_id}).")

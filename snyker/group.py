@@ -1,365 +1,433 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Dict, Optional, Any
+import concurrent.futures
+import logging
+import json
+
+from pydantic import BaseModel, Field, PrivateAttr
+
+from snyker.config import API_CONFIG # For loading_strategy
+
 if TYPE_CHECKING:
     from .api_client import APIClient
-    from .organization import Organization
+    # Use forward references for models that will be refactored
+    from .organization import OrganizationPydanticModel
     from .asset import Asset
-    from .project import Project
-    from .issue import Issue
-from .api_client import APIClient
-from .organization import Organization
-from .asset import Asset
-from .issue import Issue
-import json
-import logging
+    from .issue import IssuePydanticModel
 
-api_version_group = "2024-10-15"
+API_VERSION_GROUP = "2024-10-15"
 
-class Group:
-    """
-    Represents a Snyk Group, a top-level organizational unit in Snyk.
+class GroupAttributes(BaseModel):
+    """Attributes of a Snyk Group."""
+    name: str
 
-    A Group can contain multiple Snyk Organizations and provides a scope for
-    managing assets, issues, and policies across those organizations. This class
-    provides methods to interact with group-level Snyk API endpoints and to
-    retrieve associated entities.
+class GroupPydanticModel(BaseModel):
+    """Represents a Snyk Group.
+
+    Provides methods to access and manage entities within the group, such as
+    organizations, assets, and issues.
 
     Attributes:
-        id (str): The unique identifier of the Snyk Group.
-        name (str): The name of the Snyk Group.
-        raw (Dict[str, Any]): The raw JSON data for the group from the Snyk API.
-        api_client (APIClient): The API client instance used for Snyk API interactions.
-        logger (logging.Logger): Logger instance for this group.
-        orgs (List[Organization]): A list of Organization objects belonging to this group.
-                                   Populated by the `get_orgs()` method.
-        assets (List[Asset]): A list of Asset objects belonging to this group.
-                              Populated by the `get_assets()` method.
-        issues (List[Issue]): A list of Issue objects within this group's scope.
-                              Populated by the `get_issues()` method.
+        id: The unique identifier of the group.
+        type: The type of the Snyk entity (should be "group").
+        attributes: Detailed attributes of the group, like its name.
     """
-    def __init__(self,
-                 group_id: Optional[str] = None,
-                 api_client: Optional[APIClient] = None,
-                 params: Optional[Dict[str, Any]] = None):
-        """
-        Initializes a Snyk Group object.
+    id: str
+    type: str
+    attributes: GroupAttributes
 
-        If `group_id` is not provided, the constructor attempts to find a single
-        group associated with the API token. If multiple groups are found,
-        a ValueError is raised. If a `group_id` is provided, it fetches data
-        for that specific group.
+    _api_client: APIClient = PrivateAttr()
+    _logger: logging.Logger = PrivateAttr()
 
-        Args:
-            group_id (Optional[str]): The ID of the Snyk Group. If None, attempts
-                                      to auto-discover.
-            api_client (Optional[APIClient]): An existing APIClient instance.
-                                              If None, a new one is created with
-                                              default settings.
-            params (Optional[Dict[str, Any]]): Additional query parameters to pass when fetching
-                                     group data. Used by `get_group_data_by_id` or
-                                     `_get_all_groups_data_for_init`. Defaults to None (empty dict).
+    _organizations: Optional[List[OrganizationPydanticModel]] = PrivateAttr(default=None)
+    _assets: Optional[List[Asset]] = PrivateAttr(default=None)
+    _issues: Optional[List[IssuePydanticModel]] = PrivateAttr(default=None)
+    
+    class Config:
+        arbitrary_types_allowed = True
 
-        Raises:
-            ValueError: If `group_id` is None and no groups or multiple groups
-                        are found for the token, or if group data initialization fails.
-            KeyError: If essential keys are missing from the fetched group data.
-        """
-        _params = params if params is not None else {}
+    @classmethod
+    def _fetch_group_data_by_id(cls, group_id: str, api_client: APIClient, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Fetches raw data for a specific group by its ID."""
+        logger = api_client.logger
+        logger.debug(f"Fetching data for group ID: {group_id}")
+        uri = f"/rest/groups/{group_id}"
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {api_client.token}'}
+        current_api_params = {'version': API_VERSION_GROUP, **(params or {})}
+        try:
+            response = api_client.get(uri, headers=headers, params=current_api_params)
+            return response.json().get('data', {})
+        except Exception as e:
+            logger.error(f"Error fetching group data for ID {group_id}: {e}", exc_info=True)
+            raise ValueError(f"Failed to fetch data for group {group_id}.") from e
 
-        self.api_client: APIClient = APIClient(max_retries=15,
-                                    backoff_factor=1,
-                                    logging_level=20) if api_client is None else api_client
-        
-        if hasattr(self.api_client, 'logger') and self.api_client.logger:
-            self.logger = self.api_client.logger
-        else:
-            self.logger = logging.getLogger(f"{__name__}.GroupInstance")
-            self.logger.warning("APIClient did not have a logger; Group created its own.")
-
-        if group_id is None:
-            groups_data = self._get_all_groups_data_for_init(params=_params)
-            if len(groups_data) == 1:
-                self.raw: Dict[str, Any] = groups_data[0]
-                self.id: str = self.raw['id']
-            elif len(groups_data) == 0:
-                self.logger.error("No groups found for this token.")
-                raise ValueError("No groups found for this token.")
-            else:
-                group_names = [g.get('attributes', {}).get('name', g.get('id', 'Unknown')) for g in groups_data]
-                self.logger.error(
-                    f"Multiple groups found ({len(groups_data)}: {', '.join(group_names)}). Please specify a group_id or use a Service Account Token."
-                )
-                raise ValueError(
-                    f"Multiple groups found ({len(groups_data)}). Please specify group_id or use a Service Account Token."
-                )
-        else:
-            self.id = group_id
-            self.raw = self.get_group_data_by_id(self.id, params=_params)
-
-        if not self.raw or 'attributes' not in self.raw or 'name' not in self.raw['attributes']:
-            self.logger.error(f"Failed to initialize group. Raw data incomplete or missing name: {self.raw}")
-            raise ValueError(f"Failed to initialize group {self.id}. Raw data incomplete or missing name.")
-
-        self.name: str = self.raw['attributes']['name']
-        
-        self.orgs: List[Organization] = []
-        self.assets: List[Asset] = []
-        self.issues: List[Issue] = []
-        
-        self.logger.info(f"[Group ID: {self.id}] Created group object for '{self.name}'")
-
-    def get_group_data_by_id(self, group_id_to_fetch: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """
-        Fetches data for a specific group by its ID from the Snyk API.
-        Endpoint: GET /rest/groups/{groupId}
-
-        Args:
-            group_id_to_fetch (str): The unique identifier of the group to fetch.
-            params (Optional[Dict[str, Any]]): Additional query parameters to include in the API request.
-                                     These are merged with default parameters like 'version'.
-
-        Returns:
-            Dict[str, Any]: The raw dictionary data for the group, typically the content
-                            of the 'data' field in the API response.
-
-        Raises:
-            requests.exceptions.HTTPError: If the API request fails.
-        """
-        _params = params if params is not None else {}
-        uri = f"/rest/groups/{group_id_to_fetch}"
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'token {self.api_client.token}'
-        }
-        current_api_params = {'version': api_version_group}
-        current_api_params.update(_params)
-        response = self.api_client.get(uri, headers=headers, params=current_api_params)
-        return response.json().get('data', {})
-
-    def _get_all_groups_data_for_init(self, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """
-        Internal helper to fetch all accessible groups data during __init__.
-        Uses APIClient.paginate to handle multiple pages of group data.
-        Endpoint: GET /rest/groups
-
-        Args:
-            params (Optional[Dict[str, Any]]): Additional query parameters for fetching groups.
-
-        Returns:
-            List[Dict[str, Any]]: A list of raw dictionary data for each accessible group.
-        """
-        _params = params if params is not None else {}
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'token {self.api_client.token}'
-        }
-        current_api_params = {'version': api_version_group, 'limit': 100}
-        current_api_params.update(_params)
+    @classmethod
+    def _fetch_all_groups_data(cls, api_client: APIClient, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Fetches raw data for all groups accessible by the API token."""
+        logger = api_client.logger
+        logger.debug("Fetching all accessible groups data...")
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {api_client.token}'}
+        current_api_params = {'version': API_VERSION_GROUP, 'limit': 100, **(params or {})}
         
         all_groups_data: List[Dict[str, Any]] = []
         try:
-            for group_item_data in self.api_client.paginate(
-                endpoint="/rest/groups",
-                params=current_api_params,
-                headers=headers,
-                data_key='data'
-            ):
+            for group_item_data in api_client.paginate(
+                endpoint="/rest/groups", params=current_api_params, headers=headers, data_key='data'):
                 all_groups_data.append(group_item_data)
         except Exception as e:
-            self.logger.error(f"Error fetching groups data during init: {e}", exc_info=True)
+            logger.error(f"Error fetching all groups data: {e}", exc_info=True)
         return all_groups_data
 
-    def get_asset(self, asset_id: str, params: Optional[Dict[str, Any]] = None) -> Optional[Asset]:
-        """
-        Fetches a specific asset by its ID within this group.
-        Endpoint: GET /closed-beta/groups/{groupId}/assets/{assetId} (Note: closed-beta)
+    @classmethod
+    def get_instance(cls,
+                     api_client: APIClient,
+                     group_id: Optional[str] = None,
+                     params: Optional[Dict[str, Any]] = None) -> GroupPydanticModel:
+        """Factory method to create and initialize a GroupPydanticModel instance.
+
+        If `group_id` is provided, it fetches data for that specific group.
+        If `group_id` is None, it attempts to find a single accessible group for the
+        provided API token. If multiple groups are found, a ValueError is raised.
 
         Args:
-            asset_id (str): The unique identifier of the asset to fetch.
-            params (Optional[Dict[str, Any]]): Additional query parameters for the API request.
+            api_client: An instance of the APIClient.
+            group_id: The optional ID of the Snyk Group to fetch.
+            params: Optional query parameters for the API request.
 
         Returns:
-            Optional[Asset]: An `Asset` object if found, otherwise None.
+            An initialized GroupPydanticModel instance.
+
+        Raises:
+            ValueError: If no group_id is provided and zero or multiple groups
+                are found for the token, or if group data is incomplete.
         """
+        logger = api_client.logger
+        group_data: Optional[Dict[str, Any]] = None
+
+        if group_id:
+            group_data = cls._fetch_group_data_by_id(group_id, api_client, params)
+        else:
+            all_groups = cls._fetch_all_groups_data(api_client, params)
+            if len(all_groups) == 1:
+                group_data = all_groups[0]
+            elif len(all_groups) == 0:
+                logger.error("No groups found for this token.")
+                raise ValueError("No groups found for this token.")
+            else:
+                group_names = [g.get('attributes', {}).get('name', g.get('id', 'Unknown')) for g in all_groups]
+                logger.error(
+                    f"Multiple groups found ({len(all_groups)}: {', '.join(group_names)}). "
+                    "Please specify a group_id or use a Service Account Token scoped to a single group."
+                )
+                raise ValueError(
+                    f"Multiple groups found ({len(all_groups)}). Please specify group_id."
+                )
+        
+        if not group_data or 'attributes' not in group_data or 'name' not in group_data['attributes']:
+            gid_for_log = group_id or "auto-discovered"
+            logger.error(f"Failed to initialize group {gid_for_log}. Raw data incomplete or missing name: {group_data}")
+            raise ValueError(f"Failed to initialize group {gid_for_log}. Data incomplete.")
+
+        instance = cls(**group_data)
+        instance._api_client = api_client
+        instance._logger = logger
+        instance._logger.info(f"[Group ID: {instance.id}] Created group object for '{instance.name}'")
+
+        if API_CONFIG.get("loading_strategy") == "eager":
+            instance.fetch_organizations()
+            instance.fetch_issues()
+            
+        return instance
+
+    @property
+    def name(self) -> str:
+        """The name of the Snyk Group."""
+        return self.attributes.name
+
+    @property
+    def organizations(self) -> List[OrganizationPydanticModel]:
+        """List of organizations within this group.
+        
+        Fetched lazily or eagerly based on SDK configuration.
+        """
+        if self._organizations is None:
+            if API_CONFIG.get("loading_strategy") == "lazy":
+                self.fetch_organizations()
+            else:
+                 self._organizations = []
+        return self._organizations if self._organizations is not None else []
+        
+    @property
+    def issues(self) -> List[IssuePydanticModel]:
+        """List of issues at the group level.
+        
+        Fetched lazily or eagerly based on SDK configuration.
+        """
+        if self._issues is None:
+            if API_CONFIG.get("loading_strategy") == "lazy":
+                self.fetch_issues()
+            else:
+                 self._issues = []
+        return self._issues if self._issues is not None else []
+
+    def fetch_organizations(self, params: Optional[Dict[str, Any]] = None) -> List[OrganizationPydanticModel]:
+        """Fetches organizations for this group from the Snyk API.
+
+        If organizations have already been fetched, returns the cached list.
+        Otherwise, makes an API call to retrieve organizations. Results are
+        cached for subsequent calls.
+
+        Args:
+            params: Optional query parameters for the API request.
+
+        Returns:
+            A list of `OrganizationPydanticModel` instances.
+        """
+        self._logger.debug(f"[Group ID: {self.id}] Fetching organizations...")
+        if self._organizations is not None:
+            return self._organizations
+
+        from .organization import OrganizationPydanticModel
+
+        _params = params if params is not None else {}
+        uri = f"/rest/groups/{self.id}/orgs"
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+        current_api_params = {'version': API_VERSION_GROUP, 'limit': 100}
+        current_api_params.update(_params)
+
+        org_data_items: List[Dict[str, Any]] = []
+        try:
+            for org_data_item in self._api_client.paginate(
+                endpoint=uri, params=current_api_params, headers=headers, data_key='data'):
+                org_data_items.append(org_data_item)
+        except Exception as e_paginate:
+            self._logger.error(f"[Group ID: {self.id}] Error paginating organizations: {e_paginate}", exc_info=True)
+            self._organizations = []
+            return self._organizations
+        
+        if not org_data_items:
+            self._organizations = []
+            return self._organizations
+            
+        org_futures = []
+        for org_data in org_data_items:
+            future = self._api_client.submit_task(
+                OrganizationPydanticModel.from_api_response,
+                org_data,
+                self._api_client,
+                self,
+                fetch_full_details_if_summary=True
+            )
+            org_futures.append(future)
+
+        org_results: List[OrganizationPydanticModel] = []
+        for future in concurrent.futures.as_completed(org_futures):
+            try:
+                org_instance = future.result()
+                if org_instance:
+                    org_results.append(org_instance)
+            except Exception as e_future:
+                self._logger.error(f"[Group ID: {self.id}] Error instantiating Organization model: {e_future}", exc_info=True)
+                
+        self._organizations = org_results
+        self._logger.info(f"[Group ID: {self.id}] Fetched and instantiated {len(self._organizations)} organizations.")
+        return self._organizations
+
+    def fetch_issues(self, params: Optional[Dict[str, Any]] = None) -> List[IssuePydanticModel]:
+        """Fetches issues at the group level from the Snyk API.
+
+        If issues have already been fetched (and no new params are provided),
+        returns the cached list. Otherwise, makes an API call.
+
+        Args:
+            params: Optional query parameters for the API request.
+
+        Returns:
+            A list of `IssuePydanticModel` instances.
+        """
+        self._logger.debug(f"[Group ID: {self.id}] Fetching group-level issues...")
+        if self._issues is not None and not params:
+            return self._issues
+
+        from .issue import IssuePydanticModel
+
+        _params = params if params is not None else {}
+        uri = f"/rest/groups/{self.id}/issues"
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+        current_api_params = {'version': API_VERSION_GROUP, 'limit': 100}
+        current_api_params.update(_params)
+
+        issue_data_items: List[Dict[str, Any]] = []
+        try:
+            for issue_data_item in self._api_client.paginate(
+                endpoint=uri, params=current_api_params, headers=headers, data_key='data'):
+                issue_data_items.append(issue_data_item)
+        except Exception as e_paginate:
+            self._logger.error(f"[Group ID: {self.id}] Error paginating group issues: {e_paginate}", exc_info=True)
+            if not params: self._issues = []
+            return []
+        
+        if not issue_data_items:
+            if not params: self._issues = []
+            return []
+            
+        issue_futures = []
+        for issue_data in issue_data_items:
+            future = self._api_client.submit_task(
+                IssuePydanticModel.from_api_response,
+                issue_data,
+                self._api_client,
+                group=self
+            )
+            issue_futures.append(future)
+            
+        issue_results: List[IssuePydanticModel] = []
+        for future in concurrent.futures.as_completed(issue_futures):
+            try:
+                issue_instance = future.result()
+                if issue_instance:
+                    issue_results.append(issue_instance)
+            except Exception as e_future:
+                self._logger.error(f"[Group ID: {self.id}] Error instantiating Issue model: {e_future}", exc_info=True)
+        
+        if not params:
+            self._issues = issue_results
+        self._logger.info(f"[Group ID: {self.id}] Fetched and instantiated {len(issue_results)} group issues with params: {json.dumps(_params)}.")
+        return issue_results
+
+    def get_specific_asset(self, asset_id: str, params: Optional[Dict[str, Any]] = None) -> Optional[Asset]:
+        """Fetches a specific asset by its ID within this group.
+
+        Args:
+            asset_id: The ID of the asset to fetch.
+            params: Optional query parameters for the API request.
+
+        Returns:
+            An `Asset` instance if found, otherwise `None`.
+        """
+        self._logger.debug(f"[Group ID: {self.id}] Fetching specific asset by ID: {asset_id}...")
+        from .asset import Asset
+
         _params = params if params is not None else {}
         uri = f"/closed-beta/groups/{self.id}/assets/{asset_id}"
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'token {self.api_client.token}'
-        }
-        request_api_params = {'version': api_version_group}
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+        request_api_params = {'version': API_VERSION_GROUP}
         request_api_params.update(_params)
 
         try:
-            response = self.api_client.get(uri, headers=headers, params=request_api_params)
+            response = self._api_client.get(uri, headers=headers, params=request_api_params)
             asset_data = response.json().get('data', {})
             if asset_data:
-                asset = Asset(asset_data, group=self, api_client=self.api_client)
-                self.logger.info(f"[Group ID: {self.id}] Fetched asset '{asset.id}'")
-                return asset
+                return Asset.from_api_response(asset_data, api_client=self._api_client, group=self)
             else:
-                self.logger.warning(f"[Group ID: {self.id}] No data found for asset {asset_id}.")
+                self._logger.warning(f"[Group ID: {self.id}] No data found for asset {asset_id}.")
                 return None
         except Exception as e:
-            self.logger.error(f"[Group ID: {self.id}] Error fetching asset {asset_id}: {e}", exc_info=True)
+            self._logger.error(f"[Group ID: {self.id}] Error fetching asset {asset_id}: {e}", exc_info=True)
             return None
 
-    def get_assets(self, query: Dict[str, Any], params: Optional[Dict[str, Any]] = None) -> List[Asset]:
-        """
-        Searches for assets within the group using a POST request with a query payload.
-        Handles pagination if the API supports it for POST search results (custom logic here).
-        Endpoint: POST /closed-beta/groups/{groupId}/assets/search (Note: closed-beta)
+    def get_assets_by_query(self, query: Dict[str, Any], params: Optional[Dict[str, Any]] = None) -> List[Asset]:
+        """Searches for assets within the group using a POST request with a query payload.
 
         Args:
-            query (Dict[str, Any]): The query payload for searching assets.
-            params (Optional[Dict[str, Any]]): Additional query parameters for the request URL.
+            query: The query payload for the asset search.
+            params: Optional query parameters for the API request.
 
         Returns:
-            List[Asset]: A list of `Asset` objects matching the search query.
+            A list of `Asset` instances matching the query.
 
         Raises:
             ValueError: If the `query` parameter is not provided.
         """
+        self._logger.debug(f"[Group ID: {self.id}] Fetching assets by query: {json.dumps(query)}...")
+        from .asset import Asset
+
         _params = params if params is not None else {}
         uri = f"/closed-beta/groups/{self.id}/assets/search"
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'token {self.api_client.token}'
-        }
-        request_api_params = {'version': api_version_group, 'limit': 100}
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+        request_api_params = {'version': API_VERSION_GROUP, 'limit': 100}
         request_api_params.update(_params)
 
         if not query:
-            raise ValueError("Query parameter (dict) is required for get_assets.")
-        self.logger.debug(f"[Group ID: {self.id}] Searching assets with query: {json.dumps(query, indent=2)}")
+            raise ValueError("Query parameter (dict) is required for get_assets_by_query.")
         
-        assets_results: List[Asset] = []
-        next_page_link: Optional[str] = None
-        
+        asset_data_items: List[Dict[str, Any]] = []
         try:
-            response_obj = self.api_client.post(uri, headers=headers, params=request_api_params, data=query)
+            response_obj = self._api_client.post(uri, headers=headers, params=request_api_params, data=query)
             current_response_json = response_obj.json()
-
+            
             while True:
                 if 'data' in current_response_json:
-                    for asset_data in current_response_json.get('data', []):
-                        try:
-                            assets_results.append(Asset(asset_data, group=self, api_client=self.api_client))
-                        except Exception as e_inst:
-                            self.logger.error(f"[Group ID: {self.id}] Error instantiating Asset {asset_data.get('id', 'UnknownID')}: {e_inst}", exc_info=True)
+                    asset_data_items.extend(current_response_json.get('data', []))
                 
                 next_page_link = current_response_json.get("links", {}).get("next")
                 if next_page_link:
-                    self.logger.debug(f"Fetching next page of assets: {next_page_link}")
-                    response_obj = self.api_client.get(next_page_link, headers=headers)
+                    self._logger.debug(f"Fetching next page of assets from POST search: {next_page_link}")
+                    response_obj = self._api_client.get(next_page_link, headers=headers)
                     current_response_json = response_obj.json()
                 else:
                     break
-            
         except Exception as e:
-            self.logger.error(f"[Group ID: {self.id}] Error during asset retrieval: {e}", exc_info=True)
-
-        self.assets = assets_results
-        self.logger.info(f"[Group ID: {self.id}] Found and instantiated {len(self.assets)} assets from search.")
-        return self.assets
-
-    def get_orgs(self, params: Optional[Dict[str, Any]] = None) -> List[Organization]:
-        """
-        Fetches all organizations within this group using APIClient.paginate.
-        The fetched organizations are stored in `self.orgs`.
-        Endpoint: GET /rest/groups/{groupId}/orgs
-
-        Args:
-            params (Optional[Dict[str, Any]]): Additional query parameters for fetching organizations.
-
-        Returns:
-            List[Organization]: A list of `Organization` objects.
-        """
-        _params = params if params is not None else {}
-        uri = f"/rest/groups/{self.id}/orgs"
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'token {self.api_client.token}'
-        }
-        current_api_params = {'version': api_version_group, 'limit': 100}
-        current_api_params.update(_params)
-
-        organizations_data_items: List[Dict[str, Any]] = []
-        try:
-            for org_data_item in self.api_client.paginate(
-                endpoint=uri,
-                params=current_api_params,
-                headers=headers,
-                data_key='data'
-            ):
-                organizations_data_items.append(org_data_item)
-        except Exception as e:
-            self.logger.error(f"[Group ID: {self.id}] Error paginating organizations: {e}", exc_info=True)
-            self.orgs = []
+            self._logger.error(f"[Group ID: {self.id}] Error during asset query: {e}", exc_info=True)
             return []
 
-        instantiated_orgs: List[Organization] = []
-        for org_data in organizations_data_items:
-            org_id = org_data.get('id')
-            if org_id:
-                try:
-                    instantiated_orgs.append(Organization(org_id=org_id, group=self))
-                except Exception as e_inst:
-                    self.logger.error(f"[Group ID: {self.id}] Error instantiating Organization {org_id}: {e_inst}", exc_info=True)
-            else:
-                self.logger.warning(f"[Group ID: {self.id}] Organization data item missing 'id': {org_data}")
+        asset_futures = []
+        for asset_data in asset_data_items:
+            future = self._api_client.submit_task(
+                Asset.from_api_response,
+                asset_data,
+                self._api_client,
+                self
+            )
+            asset_futures.append(future)
+
+        asset_results: List[Asset] = []
+        for future in concurrent.futures.as_completed(asset_futures):
+            try:
+                asset_instance = future.result()
+                if asset_instance:
+                    asset_results.append(asset_instance)
+            except Exception as e_future:
+                self._logger.error(f"[Group ID: {self.id}] Error instantiating Asset model from query: {e_future}", exc_info=True)
         
-        self.orgs = instantiated_orgs
-        self.logger.info(f"[Group ID: {self.id}] Found and instantiated {len(self.orgs)} organizations.")
-        return self.orgs
+        self._logger.info(f"[Group ID: {self.id}] Found and instantiated {len(asset_results)} assets from query.")
+        return asset_results
 
-    def get_issues(self, params: Optional[Dict[str, Any]] = None) -> List[Issue]:
-        """
-        Fetches all issues within this group's scope using APIClient.paginate.
-        The fetched issues are stored in `self.issues`.
-        Endpoint: GET /rest/groups/{groupId}/issues
+    def get_organization_by_id(self, org_id: str) -> Optional[OrganizationPydanticModel]:
+        """Fetches a specific organization by its ID.
+
+        Checks if the organization is already loaded within this group instance.
+        If not, it attempts to fetch the organization directly via the API.
+        It also verifies that the fetched organization belongs to the current group.
 
         Args:
-            params (Optional[Dict[str, Any]]): Additional query parameters (filters, etc.)
-                                     for fetching issues.
+            org_id: The ID of the organization to fetch.
 
         Returns:
-            List[Issue]: A list of `Issue` objects.
+            An `OrganizationPydanticModel` instance if found and belongs to this group,
+            otherwise `None`.
         """
-        _params = params if params is not None else {}
-        uri = f"/rest/groups/{self.id}/issues"
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'token {self.api_client.token}'
-        }
-        current_api_params = {'version': api_version_group, 'limit': 100}
-        current_api_params.update(_params)
-
-        issues_data_items: List[Dict[str, Any]] = []
+        if self._organizations is not None:
+            for org in self._organizations:
+                if org.id == org_id:
+                    return org
+        
+        self._logger.debug(f"[Group ID: {self.id}] Organization {org_id} not in cache, fetching directly.")
+        from .organization import OrganizationPydanticModel
         try:
-            for issue_data_item in self.api_client.paginate(
-                endpoint=uri,
-                params=current_api_params,
-                headers=headers,
-                data_key='data' 
-            ):
-                issues_data_items.append(issue_data_item)
+            uri = f"/rest/orgs/{org_id}"
+            headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+            params = {'version': API_VERSION_GROUP}
+            response = self._api_client.get(uri, headers=headers, params=params)
+            org_data = response.json().get('data')
+            if org_data:
+                org_group_id = org_data.get('relationships',{}).get('group',{}).get('data',{}).get('id')
+                if org_group_id == self.id:
+                    return OrganizationPydanticModel.from_api_response(org_data, self._api_client, self)
+                else:
+                    self._logger.warning(f"Org {org_id} fetched but belongs to group {org_group_id}, not {self.id}.")
+                    return None
+            return None
         except Exception as e:
-            self.logger.error(f"[Group ID: {self.id}] Error paginating issues: {e}", exc_info=True)
-            self.issues = []
-            return []
-
-        instantiated_issues: List[Issue] = []
-        for issue_data in issues_data_items:
-            issue_id = issue_data.get('id')
-            if issue_id:
-                try:
-                    instantiated_issues.append(Issue(issue_data=issue_data, group=self))
-                except Exception as e_inst:
-                    self.logger.error(f"[Group ID: {self.id}] Error instantiating Issue {issue_id}: {e_inst}", exc_info=True)
-            else:
-                self.logger.warning(f"[Group ID: {self.id}] Issue data item missing 'id': {issue_data}")
-
-        self.issues = instantiated_issues
-        self.logger.info(f"[Group ID: {self.id}] Found and instantiated {len(self.issues)} issues with params: {json.dumps(_params)}")
-        return self.issues
+            self._logger.error(f"[Group ID: {self.id}] Error fetching organization {org_id}: {e}", exc_info=True)
+            return None

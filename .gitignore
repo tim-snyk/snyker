@@ -1,42 +1,166 @@
-# macOS specific
-.DS_Store
-
-# IDE configuration
-# JetBrains IDEs (like PyCharm, IntelliJ IDEA)
-.idea/
-
-# VSCode
-.vscode/
-
-# Python virtual environment
-# Common names for virtual environments
-.venv/
-venv/
-env/
-ENV/
-*.venv
-
-# Python specific
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
+# C extensions
+*.so
+
 # Distribution / packaging
+.Python
 build/
+develop-eggs/
 dist/
-*.egg-info/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
 wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
 *.egg
+MANIFEST
 
-# Lock files from specific package managers (uv.lock seems to be from 'uv' package manager)
-# If uv.lock IS intended to be shared (like poetry.lock or Pipfile.lock), then REMOVE this line.
-# Typically, lock files for applications are committed, for libraries they might not be.
-# Given 'uv' is a newer tool, confirm its best practices for uv.lock.
-# For now, I'll assume it might be like a poetry.lock and should be committed,
-# so I will comment it out. If you want to ignore it, uncomment the line below.
-# uv.lock
+# PyInstaller
+#  Usually these files are written by a CI script in a temporary folder.
+#  Still, they should not be committed.
+*.manifest
+*.spec
 
-# If you have other specific log files or temporary files, add them here.
-# For example:
-# *.log
-# tmp/
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# PEP 582; __pypackages__ directory
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# VSCode specific
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created by macOS storing log files
+# Private folder (contains /var/folders, /var/log, etc.)
+private/
+
+# Snyk specific (policy file is usually .snyk)
+# If the .snyk file itself should be committed (e.g. for shared policy),
+# then this line should be more specific or removed.
+# For now, assuming the .snyk file in the root is important.
+# .snyk/ # Example: ignore .snyk directory if it contains user-specific state
+
+# dotenv
+.env.*
+
+# poetry.lock and uv.lock are typically committed, so not listed here.
+# .python-version is typically committed.

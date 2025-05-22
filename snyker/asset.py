@@ -1,346 +1,379 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Dict, Optional, Tuple
-if TYPE_CHECKING:
-    from .api_client import APIClient
-    from .group import Group
-    from .organization import Organization
-    from .project import Project
+from typing import TYPE_CHECKING, List, Dict, Optional, Any, Tuple
 
+from pydantic import BaseModel, Field, PrivateAttr
 from urllib.parse import urlparse
-from .api_client import APIClient
-from .project import Project
-from .organization import Organization
 import concurrent.futures
 import logging
 
-api_version_asset = "2024-10-15"
+from snyker.config import API_CONFIG # For loading_strategy
 
-class Asset:
-    """
-    Represents a Snyk Asset, such as a repository, package, or image.
+if TYPE_CHECKING:
+    from .api_client import APIClient
+    # Use forward references for models that will be refactored
+    from .group import GroupPydanticModel
+    from .organization import OrganizationPydanticModel
+    from .project import ProjectPydanticModel
 
-    An Asset object encapsulates data retrieved from the Snyk API for a specific
-    asset. It provides methods to access related entities like organizations
-    and projects.
+API_VERSION_ASSET = "2024-10-15"
+
+class AssetAttributes(BaseModel):
+    """Attributes of a Snyk asset."""
+    name: str
+    class_data: Optional[Dict[str, Any]] = Field(default=None, alias="class")
+    issues_counts: Optional[Dict[str, int]] = None
+    sources: List[str] = Field(default_factory=list)
+    coverage_control: Optional[List[Dict[str, Any]]] = None
+    archived: Optional[bool] = None
+    app_context: Optional[Dict[str, Any]] = None
+    browse_url: Optional[str] = None
+    
+    # Type-specific attributes
+    languages: Optional[Dict[str, int]] = None
+    tags: Optional[List[str]] = None
+    repository_freshness: Optional[str] = None
+    file_path: Optional[str] = None
+    repository_url: Optional[str] = None
+    image_tags: Optional[List[str]] = None
+    image_registries: Optional[List[str]] = None
+    image_repositories: Optional[List[str]] = None
+
+    # Captures 'organizations' list if part of asset attributes.
+    organizations_payload: Optional[List[Dict[str, Any]]] = Field(default=None, alias="organizations")
+
+
+    @property
+    def app_name(self) -> Optional[str]:
+        """The application name from app_context, if available."""
+        return self.app_context.get("application") if self.app_context else None
+
+    @property
+    def app_catalog_name(self) -> Optional[str]:
+        """The application catalog name from app_context, if available."""
+        return self.app_context.get("catalog_name") if self.app_context else None
+    
+    @property
+    def app_category(self) -> Optional[str]:
+        """The application category from app_context, if available."""
+        return self.app_context.get("category") if self.app_context else None
+
+    @property
+    def app_lifecycle(self) -> Optional[str]:
+        """The application lifecycle stage from app_context, if available."""
+        return self.app_context.get("lifecycle") if self.app_context else None
+
+    @property
+    def app_owner(self) -> Optional[str]:
+        """The application owner from app_context, if available."""
+        return self.app_context.get("owner") if self.app_context else None
+
+    @property
+    def app_source(self) -> Optional[str]:
+        """The application source from app_context, if available."""
+        return self.app_context.get("source") if self.app_context else None
+
+    @property
+    def app_title(self) -> Optional[str]:
+        """The application title from app_context, if available."""
+        return self.app_context.get("title") if self.app_context else None
+
+
+class AssetRelationshipsProjectsLink(BaseModel):
+    """Link to related projects for an asset."""
+    related: Optional[str] = None
+
+class AssetRelationshipsProjects(BaseModel):
+    """Project relationships for an asset."""
+    links: Optional[AssetRelationshipsProjectsLink] = None
+
+class AssetRelationships(BaseModel):
+    """Relationships of a Snyk asset."""
+    projects: Optional[AssetRelationshipsProjects] = None
+
+class Asset(BaseModel):
+    """Represents a Snyk asset.
 
     Attributes:
-        id (str): The unique identifier of the asset.
-        name (str): The name of the asset.
-        type (str): The type of asset (e.g., 'repository', 'package').
-        raw (dict): The raw JSON data for the asset from the Snyk API.
-        api_client (APIClient): The API client instance used for making further API calls.
-        group (Optional[Group]): The parent Group object, if this asset is contextualized
-                                                     within a group.
-        organizations (Optional[List[Organization]]): A list of Organization objects
-                                                     associated with this asset. Populated
-                                                     by `get_orgs()` or during init if data present.
-        projects (Optional[List[Project]]): A list of Project objects associated
-                                            with this asset. Populated by `get_projects()`.
-        logger (logging.Logger): Logger instance.
+        id: The unique identifier of the asset.
+        type: The type of the asset (e.g., 'repository', 'package').
+        attributes: Detailed attributes of the asset.
+        relationships: Relationships to other Snyk entities.
     """
-    def __init__(self,
-                 asset_data: dict,
-                 group: Optional['Group'] = None,
-                 api_client: Optional['APIClient'] = None,
-                 params: Optional[dict] = None):
-        """
-        Initializes an Asset object.
+    id: str
+    type: str
+    attributes: AssetAttributes
+    relationships: Optional[AssetRelationships] = None
 
-        One of `group` or `api_client` must be provided to ensure the asset
-        has an API context. The constructor parses `asset_data` to populate
-        various attributes of the asset.
+    _api_client: APIClient = PrivateAttr()
+    _group: Optional[GroupPydanticModel] = PrivateAttr(default=None)
+    _logger: logging.Logger = PrivateAttr()
+
+    _organizations: Optional[List[OrganizationPydanticModel]] = PrivateAttr(default=None)
+    _projects: Optional[List[ProjectPydanticModel]] = PrivateAttr(default=None)
+    
+    class Config:
+        arbitrary_types_allowed = True
+
+
+    @classmethod
+    def from_api_response(cls,
+                          asset_data: Dict[str, Any],
+                          api_client: APIClient,
+                          group: Optional[GroupPydanticModel] = None) -> Asset:
+        """Creates an Asset instance from API response data.
 
         Args:
-            asset_data (dict): The raw dictionary data for the asset from the Snyk API.
-                               This typically comes from a 'data' field in an API response.
-            group (Optional['Group']): The parent Group object. If provided, its
-                                       `api_client` will be used.
-            api_client (Optional['APIClient']): An APIClient instance. Used if `group`
-                                                is not provided or if `group` doesn't
-                                                have an `api_client`.
-            params (Optional[dict]): Additional parameters, primarily used if organizations
-                                     are instantiated during asset initialization. Defaults to None,
-                                     which becomes an empty dict internally.
-
-        Raises:
-            ValueError: If neither `group` nor `api_client` is provided, or if
-                        essential keys (id, name, type) are missing from `asset_data`.
-        """
-        if group is None and api_client is None:
-            raise ValueError("Asset must be initialized with either a Group or an APIClient instance.")
-
-        _params = params if params is not None else {}
-
-        self.api_client: APIClient
-        if group:
-            self.group: Optional['Group'] = group
-            self.api_client = group.api_client
-        elif api_client:
-            self.group = None
-            self.api_client = api_client
-        
-        if hasattr(self.api_client, 'logger') and self.api_client.logger:
-            self.logger = self.api_client.logger
-        else:
-            self.logger = logging.getLogger(f"{__name__}.AssetInstance")
-            self.logger.warning("APIClient did not have a logger; Asset created its own.")
-
-        self.organizations: Optional[List[Organization]] = None
-        self.projects: Optional[List[Project]] = None
-        self.raw = asset_data
-
-        try:
-            self.id = asset_data['id']
-            attributes = asset_data.get('attributes', {})
-            self.name = attributes['name']
-            self.type = asset_data['type']
-        except KeyError as e:
-            self.logger.error(f"Essential key missing in asset_data for asset {asset_data.get('id', 'UnknownID')}: {e}. Data: {asset_data}")
-            raise ValueError(f"Asset data missing essential key: {e}") from e
-
-        self.asset_class = attributes.get('class')
-        if 'issues_counts' in attributes:
-            self.issues_counts = attributes.get('issues_counts')
-
-        self.sources = attributes.get('sources', [])
-        self.coverage_controls = attributes.get('coverage_control')
-        
-        # Instantiate organizations if 'snyk' source and org data present
-        if 'snyk' in self.sources and 'organizations' in attributes:
-            if self.group is not None:
-                self.logger.debug(f"[Asset ID: {self.id}] Found Snyk source, extracting organizations from {attributes['organizations']}")
-                self.organizations = []
-                for org_payload in attributes.get('organizations', []):
-                    if 'id' in org_payload:
-                        self.organizations.append(Organization(org_id=org_payload['id'], group=self.group, params=_params))
-                    else:
-                        self.logger.warning(f"[Asset ID: {self.id}] Organization payload missing 'id': {org_payload}")
-            else:
-                 self.logger.warning(f"[Asset ID: {self.id}] Snyk source with organizations found, but no Group context to instantiate them.")
-
-        self.archived = attributes.get('archived')
-
-        if 'app_context' in attributes:
-            app_context = attributes.get('app_context', {})
-            self.app_name = app_context.get('application')
-            self.app_catalog_name = app_context.get('catalog_name')
-            self.app_category = app_context.get('category')
-            self.app_lifecycle = app_context.get('lifecycle')
-            self.app_owner = app_context.get('owner')
-            self.app_source = app_context.get('source')
-            self.app_title = app_context.get('title')
-
-        # Type-specific attributes
-        self.browse_url = attributes.get('browse_url')
-        if self.type == 'repository':
-            if 'github' in self.sources:
-                self.languages = attributes.get('languages')
-                self.tags = attributes.get('tags')
-            self.repository_freshness = attributes.get('repository_freshness')
-        elif self.type == 'package':
-            self.file_path = attributes.get('file_path')
-            self.repository_url = attributes.get('repository_url')
-        elif self.type == 'image':
-            self.image_tags = attributes.get('image_tags')
-            self.image_registries = attributes.get('image_registries')
-            self.image_repositories = attributes.get('image_repositories')
-        
-        self.logger.info(f"[Asset ID: {self.id}] Created asset object for '{self.name}' of type '{self.type}'")
-
-    def githubNameAndOwnerFromUrl(self) -> Optional[Tuple[str, str]]:
-        """
-        Extracts the GitHub repository name and owner from the asset's browse URL.
-
-        This is a helper function primarily for assets of type 'repository' where
-        the `browse_url` attribute points to a GitHub repository.
+            asset_data: The 'data' part of an API item representing an asset.
+            api_client: An instance of the APIClient.
+            group: The parent GroupPydanticModel instance, if applicable.
 
         Returns:
-            Optional[Tuple[str, str]]: A tuple containing (repository_name, owner_name)
-                                        if successful, or None if the URL is not present,
-                                        not a GitHub URL, or parsing fails.
+            An instance of Asset.
         """
-        if not hasattr(self, 'browse_url') or not self.browse_url:
-            self.logger.warning(f"No browser URL found for asset {self.id}. Cannot extract GitHub Name.")
-            return None
-        
-        try:
-            parsed_url = urlparse(self.browse_url)
-            if 'github.com' not in parsed_url.netloc.lower():
-                self.logger.debug(f"Asset {self.id} browse_url '{self.browse_url}' is not a standard GitHub URL.")
-                return None
+        instance = cls(**asset_data)
+        instance._api_client = api_client
+        instance._group = group
+        instance._logger = api_client.logger
+
+        instance._logger.info(f"[Asset ID: {instance.id}] Created asset object for '{instance.name}' type '{instance.type}'")
+
+        if API_CONFIG.get("loading_strategy") == "eager":
+            instance.fetch_orgs_from_attributes()
+            instance.fetch_projects_via_relationship()
             
-            path_segments = parsed_url.path.strip('/').split('/')
-            if len(path_segments) >= 2:
-                owner_name = path_segments[0]
-                repo_name = path_segments[1]
-                return repo_name, owner_name
-            else:
-                self.logger.warning(f"Could not parse owner/repo from path '{parsed_url.path}' for asset {self.id}.")
-                return None
-        except Exception as e:
-            self.logger.error(f"Error parsing GitHub URL '{self.browse_url}' for asset {self.id}: {e}", exc_info=True)
-            return None
+        return instance
 
-    def get_projects(self, params: Optional[dict] = None) -> List[Project]:
+    @property
+    def name(self) -> str:
+        """The name of the asset."""
+        return self.attributes.name
+
+    @property
+    def organizations(self) -> List[OrganizationPydanticModel]:
+        """List of organizations associated with this asset.
+        
+        Fetched lazily or eagerly based on SDK configuration.
         """
-        Fetches and instantiates all Snyk Project objects associated with this asset.
+        if self._organizations is None:
+            if API_CONFIG.get("loading_strategy") == "lazy":
+                self.fetch_orgs_from_attributes()
+            else:
+                 self._organizations = []
+        return self._organizations if self._organizations is not None else []
+        
+    @property
+    def projects(self) -> List[ProjectPydanticModel]:
+        """List of Snyk projects related to this asset.
+        
+        Fetched lazily or eagerly based on SDK configuration.
+        """
+        if self._projects is None:
+            if API_CONFIG.get("loading_strategy") == "lazy":
+                self.fetch_projects_via_relationship()
+            else:
+                 self._projects = []
+        return self._projects if self._projects is not None else []
 
-        This method uses the 'related' link for projects from the asset's raw data
-        and paginates through the results. Project instantiation may be done concurrently.
-        The fetched projects are stored in `self.projects`.
+    def fetch_orgs_from_attributes(self, params: Optional[Dict[str, Any]] = None) -> List[OrganizationPydanticModel]:
+        """Instantiates Organization models from organization data embedded in the Asset's attributes.
+
+        This method relies on the 'organizations_payload' (aliased from 'attributes.organizations')
+        field within the asset's attributes. It is typically called during lazy loading or
+        eager loading initialization.
 
         Args:
-            params (Optional[dict]): Additional query parameters to pass to the Snyk API
-                                     when fetching project data. These are merged with
-                                     default parameters like version and limit.
+            params: Optional parameters (currently unused but kept for future compatibility).
 
         Returns:
-            List[Project]: A list of Project objects associated with this asset.
-                           Returns an empty list if no projects are found or if the
-                           asset is not from a 'snyk' source.
+            A list of OrganizationPydanticModel instances.
         """
-        _params = params if params is not None else {}
-
-        if 'snyk' not in self.sources:
-            self.logger.warning(f"Asset {self.id} does not have a Snyk source. Cannot extract projects.")
-            self.projects = []
-            return []
+        self._logger.debug(f"[Asset ID: {self.id}] Instantiating organizations from asset attributes...")
         
-        try:
-            projects_related_link = self.raw['relationships']['projects']['links']['related']
-        except KeyError:
-            self.logger.warning(f"[Asset ID: {self.id}] No 'related' link found for projects in asset data. Raw relationships: {self.raw.get('relationships')}")
-            self.projects = []
-            return []
+        if self._organizations is not None:
+            return self._organizations
 
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'token {self.api_client.token}'
-        }
-        current_api_params = {
-            'version': api_version_asset,
-            'limit': 100,
-        }
+        from .organization import OrganizationPydanticModel
+
+        instantiated_organizations: List[OrganizationPydanticModel] = []
+        
+        if 'snyk' not in self.attributes.sources:
+            self._logger.info(f"Asset {self.id} not a 'snyk' source. No organizations to instantiate from asset attributes.")
+            self._organizations = []
+            return self._organizations
+
+        org_payloads = self.attributes.organizations_payload or []
+
+        if not self._group:
+            self._logger.warning(f"[Asset ID: {self.id}] Cannot instantiate orgs as asset has no parent Group context.")
+            self._organizations = []
+            return self._organizations
+
+        org_futures = []
+        for org_data in org_payloads:
+            org_id = org_data.get('id')
+            if org_id:
+                future = self._api_client.submit_task(
+                    OrganizationPydanticModel.from_api_response, 
+                    org_data, 
+                    self._api_client,
+                    self._group,
+                    fetch_full_details_if_summary=True
+                )
+                org_futures.append(future)
+            else:
+                self._logger.warning(f"[Asset ID: {self.id}] Org data in asset attributes missing 'id': {org_data}")
+
+        for future in concurrent.futures.as_completed(org_futures):
+            try:
+                org_instance = future.result()
+                if org_instance:
+                    instantiated_organizations.append(org_instance)
+            except Exception as e_future:
+                self._logger.error(f"[Asset ID: {self.id}] Error instantiating Org model from asset attr: {e_future}", exc_info=True)
+
+        self._organizations = instantiated_organizations
+        self._logger.info(f"[Asset ID: {self.id}] Instantiated {len(self._organizations)} orgs from asset attributes.")
+        return self._organizations
+
+    def fetch_projects_via_relationship(self, params: Optional[Dict[str, Any]] = None) -> List[ProjectPydanticModel]:
+        """Fetches Snyk projects related to this asset via the relationship link.
+
+        This method uses the 'projects' relationship link provided in the asset data
+        to paginate and fetch associated projects.
+
+        Args:
+            params: Optional query parameters to pass to the projects API endpoint.
+
+        Returns:
+            A list of ProjectPydanticModel instances.
+        """
+        self._logger.debug(f"[Asset ID: {self.id}] Fetching projects via relationship link...")
+        _params = params if params is not None else {}
+        
+        if self._projects is not None:
+            return self._projects
+
+        from .project import ProjectPydanticModel
+        from .organization import OrganizationPydanticModel
+
+
+        if 'snyk' not in self.attributes.sources:
+            self._logger.warning(f"Asset {self.id} does not have a Snyk source. Cannot fetch projects.")
+            self._projects = []
+            return self._projects
+
+        projects_related_link: Optional[str] = None
+        if self.relationships and self.relationships.projects and self.relationships.projects.links:
+            projects_related_link = self.relationships.projects.links.related
+        
+        if not projects_related_link:
+            self._logger.warning(f"[Asset ID: {self.id}] No 'related' link for projects in asset relationships.")
+            self._projects = []
+            return self._projects
+
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+        current_api_params = {'version': API_VERSION_ASSET, 'limit': 100}
         current_api_params.update(_params)
         
-        all_project_data_items = []
-        self.logger.info(f"[Asset ID: {self.id}] Fetching project data from '{projects_related_link}' with params: {current_api_params}.")
-
+        all_project_data_items: List[Dict[str, Any]] = []
         try:
-            for project_data_item in self.api_client.paginate(
-                    endpoint=projects_related_link,
-                    params=current_api_params,
-                    data_key='data',
-                    headers=headers
-            ):
+            for project_data_item in self._api_client.paginate(
+                    endpoint=projects_related_link, params=current_api_params, data_key='data', headers=headers):
                 all_project_data_items.append(project_data_item)
         except Exception as e_paginate:
-            self.logger.error(f"[Asset ID: {self.id}] Error paginating projects: {e_paginate}", exc_info=True)
-            self.projects = []
-            return []
+            self._logger.error(f"[Asset ID: {self.id}] Error paginating projects: {e_paginate}", exc_info=True)
+            self._projects = []
+            return self._projects
 
-        self.logger.debug(f"[Asset ID: {self.id}] Collected {len(all_project_data_items)} project data items.")
         if not all_project_data_items:
-            self.projects = []
-            return []
+            self._projects = []
+            return self._projects
 
-        if self.organizations is None:
-            self.logger.info(f"[Asset ID: {self.id}] Organizations not loaded, fetching them for project context.")
-            self.get_orgs(_params)
-        
+        org_context_list = self.organizations 
+
         project_futures = []
         for project_data in all_project_data_items:
-            project_id = project_data.get('id')
-            if not project_id:
-                self.logger.warning(f"[Asset ID: {self.id}] Project data item missing ID: {project_data}. Skipping.")
-                continue
-
             org_id_for_project = project_data.get('relationships', {}).get('organization', {}).get('data', {}).get('id')
-            if not org_id_for_project:
-                 org_id_for_project = project_data.get('attributes', {}).get('organization_id')
-
-
-            organization_object_for_project = None
-            if org_id_for_project and self.organizations:
-                organization_object_for_project = next((org for org in self.organizations if org.id == org_id_for_project), None)
+            organization_object_for_project: Optional[OrganizationPydanticModel] = None
+            if org_id_for_project and org_context_list:
+                organization_object_for_project = next((org for org in org_context_list if org.id == org_id_for_project), None)
             
-            if not organization_object_for_project:
-                self.logger.warning(f"[Asset ID: {self.id}] Could not find Organization object for project {project_id} (org_id: {org_id_for_project}). Project may lack full org context.")
-
-            future = self.api_client.submit_task(
-                Project,
-                project_id=project_id,
-                organization=organization_object_for_project,
-                group=self.group,
-                api_client=self.api_client
+            future = self._api_client.submit_task(
+                ProjectPydanticModel.from_api_response,
+                project_data,
+                self._api_client,
+                organization_object_for_project,
+                self._group
             )
             project_futures.append(future)
 
-        projects_results: List[Project] = []
-        self.logger.debug(f"[Asset ID: {self.id}] Waiting for {len(project_futures)} Project instantiations.")
-        for i, future in enumerate(concurrent.futures.as_completed(project_futures)):
+        projects_results: List[ProjectPydanticModel] = []
+        for future in concurrent.futures.as_completed(project_futures):
             try:
                 project_instance = future.result()
                 if project_instance:
                     projects_results.append(project_instance)
-                log_name = getattr(project_instance, 'name', 'N/A') if project_instance else 'None'
-                self.logger.debug(f"[Asset ID: {self.id}] Completed project instantiation {i + 1}/{len(project_futures)}: {log_name}")
             except Exception as e_future:
-                self.logger.error(f"[Asset ID: {self.id}] Error instantiating project (task {i + 1}): {e_future}", exc_info=True)
+                self._logger.error(f"[Asset ID: {self.id}] Error instantiating project model: {e_future}", exc_info=True)
+        
+        self._projects = projects_results
+        self._logger.info(f"[Asset ID: {self.id}] Fetched and instantiated {len(self._projects)} projects.")
+        return self._projects
 
-        self.projects = projects_results
-        self.logger.info(f"[Asset ID: {self.id}] Instantiated {len(self.projects)} of {len(all_project_data_items)} Projects.")
-        return self.projects
-
-    def get_orgs(self, params: Optional[dict] = None) -> List[Organization]:
-        """
-        Retrieves or instantiates Organization objects associated with this asset.
-
-        If the asset's raw data (`self.raw`) contains organization information
-        (typically under `attributes.organizations` for 'snyk' sourced assets),
-        this method instantiates `Organization` objects for each.
-        The instantiated organizations are stored in `self.organizations`.
-
-        Args:
-            params (Optional[dict]): Additional parameters to pass to the
-                                     `Organization` constructor if they are
-                                     instantiated. Defaults to None (empty dict).
+    def githubNameAndOwnerFromUrl(self) -> Optional[Tuple[str, str]]:
+        """Extracts GitHub repository name and owner from the asset's browse_url.
 
         Returns:
-            List[Organization]: A list of `Organization` objects. Returns an
-                                empty list if no organizations are found or if
-                                the asset is not from a 'snyk' source with
-                                organization data.
+            A tuple containing (repository_name, owner_name) if successful,
+            otherwise None.
         """
-        _params = params if params is not None else {}
+        if not self.attributes.browse_url:
+            self._logger.warning(f"No browser URL for asset {self.id}. Cannot extract GitHub Name/Owner.")
+            return None
+        try:
+            parsed_url = urlparse(self.attributes.browse_url)
+            if 'github.com' not in parsed_url.netloc.lower():
+                self._logger.debug(f"Asset {self.id} browse_url not a GitHub URL: {self.attributes.browse_url}")
+                return None
+            path_segments = parsed_url.path.strip('/').split('/')
+            if len(path_segments) >= 2:
+                return path_segments[1], path_segments[0] # repo_name, owner_name
+            return None
+        except Exception as e:
+            self._logger.error(f"Error parsing GitHub URL '{self.attributes.browse_url}': {e}", exc_info=True)
+            return None
 
-        if self.organizations is not None:
-            return self.organizations
+    def get_business_criticality_from_asset(self) -> Optional[str]:
+        """Determines the business criticality based on the asset's rank.
 
-        if 'snyk' not in self.sources or 'organizations' not in self.raw.get('attributes', {}):
-            self.logger.info(f"Asset {self.id} not a 'snyk' source or no 'organizations' attribute. Cannot extract orgs directly.")
-            self.organizations = []
-            return []
-        
-        instantiated_organizations = []
-        org_payloads = self.raw.get('attributes', {}).get('organizations', [])
-        
-        if not self.group:
-            self.logger.warning(f"[Asset ID: {self.id}] Cannot instantiate organizations as asset has no parent Group context.")
-            self.organizations = []
-            return []
+        Returns:
+            The business criticality string ('critical', 'high', 'medium', 'low')
+            or None if rank is not available or invalid.
+        """
+        if not self.attributes.class_data or 'rank' not in self.attributes.class_data:
+            self._logger.warning(f"Asset {self.id} has no class_data or rank.")
+            return None
+        try:
+            rank = int(self.attributes.class_data['rank'])
+            mapping = {1: 'critical', 2: 'high', 3: 'medium', 4: 'low'}
+            return mapping.get(rank)
+        except (ValueError, TypeError):
+            self._logger.warning(f"Invalid rank '{self.attributes.class_data.get('rank')}' for asset {self.id}.")
+            return None
 
-        for org_data in org_payloads:
-            org_id = org_data.get('id')
-            if org_id:
-                try:
-                    org_instance = Organization(org_id=org_id, group=self.group, params=_params)
-                    instantiated_organizations.append(org_instance)
-                except Exception as e:
-                    self.logger.error(f"[Asset ID: {self.id}] Failed to instantiate Organization {org_id}: {e}", exc_info=True)
-            else:
-                self.logger.warning(f"[Asset ID: {self.id}] Organization data missing 'id': {org_data}")
-        
-        self.organizations = instantiated_organizations
-        self.logger.info(f"[Asset ID: {self.id}] Found and instantiated {len(self.organizations)} organizations.")
-        return self.organizations
+    def get_lifecycle_from_asset(self) -> Optional[str]:
+        """Retrieves the lifecycle stage of the asset from its app_context.
+
+        Returns:
+            The lifecycle stage ('production', 'development', 'sandbox') or
+            defaults to 'Development' if incompatible, or None if not set.
+        """
+        lifecycle = self.attributes.app_lifecycle
+        if lifecycle and lifecycle in ['production', 'development', 'sandbox']:
+            return lifecycle
+        elif lifecycle is None:
+            self._logger.warning(f"No lifecycle for asset {self.id}.")
+            return None
+        else:
+            self._logger.warning(f"Lifecycle '{lifecycle}' incompatible for asset {self.id}. Defaulting to 'Development'")
+            return 'Development'
