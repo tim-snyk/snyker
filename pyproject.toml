@@ -30,6 +30,7 @@ dependencies = [
     "urllib3",          # For 'from urllib3.util.retry import Retry'
     "httpx>=0.28.1",    # For 'import httpx'
     "mcp[cli]>=1.8.0",  # For 'import mcp'
+    "pygit2==1.18.0"    # For reading .git files in snyker.CLIWrapper
 
 ]
 

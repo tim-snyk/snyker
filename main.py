@@ -1,6 +1,7 @@
 from snyker import Group, APIClient
 import json
 
+
 def main():
     """
     Example of how to use the Snyk API client to get all issues in a group and print them. Doubles as a test case.
@@ -24,23 +25,29 @@ def main():
             logging_level=20))  # 10 = DEBUG, 20 = INFO, 30 = WARNING, 40 = ERROR, 50 = CRITICAL
 
     '''
-    Example showing how to get all organizations in a group. Calling a get_ method on objects will both return the 
-    list of objects as well set the objects attribute on the object itself.
+    Example showing how to get all organizations in a group then getting the projects and then getting the issues. 
+    Calling a get_ method on objects will both return the list of objects as well set the objects attribute on 
+    the object itself. It will not 'hydrate' those entities upstream, i.e. group.issues is still unpopulated. This
+    may be an upcoming enhancement to the SDK but was deemed low-priority at the moment so we would need to explicitly
+    assign the list upstream.
     '''
-    group.get_issues()
-    exit(0)
-    orgs = group.get_orgs()
-    if orgs == group.orgs:
-        print(f"Matching sets of orgs. Total Orgs: {len(orgs)}, Total Orgs in Group: {len(group.orgs)}")
+    import json
+    for org in group.get_orgs(params={'slug': 'cli-upload-test-5jMFX8GCf5RQhAiH5K9fNs'}):
+        for proj in org.get_projects(params={'origins': 'cli'}):
+            print(json.dumps(proj.raw['data'], indent=4))
 
+    for org in group.orgs:
+        org.get_projects()
+        for project in org.projects:
+            group.issues.append(project.get_issues())
+    print(f"Matching sets of orgs. Total Orgs: {len(orgs)}, Total Orgs in Group: {len(group.orgs)}")
     '''
     Policy class has some extensibility designed for it, hence the policy.conditions_group attribute is a 
     ConditionsGroup defined within the Policy class file to access the conditions of the policy.
     '''
     policy_finding_ids = []
     for org in group.orgs:
-        org.get_policies()  # Instantiate before accessing
-        if org.policies:    # If no policies, skip
+        if org.policies:  # If no policies, skip
             for policy in org.policies:
                 print(f"{policy.conditions_group.field}: {policy.conditions_group.value}, id: {policy.id}")
                 policy_finding_ids.append(policy.conditions_group.value)
@@ -68,7 +75,6 @@ def main():
     diff_2 = list(set(policy_finding_ids) - set(issue_finding_ids))
     print(f"{len(diff_1)} Finding IDs in issues but not in policies: {diff_1}")
     print(f"{len(diff_2)} Finding IDs in policies but not in issues: {diff_2}")
-
 
     '''
     Example in accessing a sub-entity like Assets, we can get all assets in a group which are returned as a list of 

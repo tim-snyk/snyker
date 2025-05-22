@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from snyker import APIClient, Organization, Asset, Project, Issue
 from snyker import APIClient
 import json
-
 api_version = "2024-10-15"  # Set the API version.
 
 
@@ -14,6 +13,8 @@ class Group:
                  group_id: str = None,
                  api_client: Optional['APIClient'] = None,
                  params: dict = {}):
+        from snyker import APIClient, Organization, Asset, Project, Issue
+
         self.api_client = APIClient(max_retries=15,
                                     backoff_factor=1,
                                     logging_level=20) if api_client is None else api_client
@@ -29,9 +30,9 @@ class Group:
             self.raw = self.get_group(group_id)
         self.id = self.raw['id']
         self.name = self.raw['attributes']['name']
-        self.orgs = None
-        self.assets = None
-        self.issues = None
+        self.orgs = [Organization]
+        self.assets = [Asset]
+        self.issues = [Issue]
         self.logger.info(f"[Group ID: {self.id}].__init__ created group object for {self.name}")
 
     def get_group(self, params: dict = {}) -> dict:
