@@ -35,31 +35,29 @@ class APIClient:
                  max_retries: Optional[int] = None,
                  backoff_factor: Optional[float] = None,
                  status_forcelist: Optional[Tuple[int, ...]] = None,
-                 logging_level: Optional[int] = None, # This will be the integer value
+                 logging_level: Optional[int] = None,
                  max_workers: Optional[int] = None
                  ):
-        """
-        Initializes the APIClient.
+        """Initializes the APIClient.
 
         Args:
-            max_retries (Optional[int]): Maximum number of retries for failed requests.
-                                         Overrides config if provided.
-            backoff_factor (Optional[float]): Factor by which to increase delay between retries.
-                                              Overrides config if provided.
-            status_forcelist (Optional[Tuple[int, ...]]): HTTP status codes that trigger a retry.
-                                                          Overrides config if provided.
-            logging_level (Optional[int]): The logging level for the client's logger
-                                           (e.g., logging.DEBUG). Overrides config if provided.
-            max_workers (Optional[int]): Max worker threads for concurrent API calls.
-                                         Overrides config if provided. If None here and in config,
-                                         it defaults to min(32, os.cpu_count() + 4).
+            max_retries: Maximum number of retries for failed requests.
+                Overrides config if provided.
+            backoff_factor: Factor by which to increase delay between retries.
+                Overrides config if provided.
+            status_forcelist: HTTP status codes that trigger a retry.
+                Overrides config if provided.
+            logging_level: The logging level for the client's logger
+                (e.g., `logging.DEBUG`). Overrides config if provided.
+            max_workers: Max worker threads for concurrent API calls.
+                Overrides config if provided. If None here and in config,
+                it defaults to `min(32, os.cpu_count() + 4)`.
         """
-        # Use provided args or fall back to loaded config values
         _max_retries = max_retries if max_retries is not None else API_CONFIG["max_retries"]
         _backoff_factor = backoff_factor if backoff_factor is not None else API_CONFIG["backoff_factor"]
         _status_forcelist = status_forcelist if status_forcelist is not None else tuple(API_CONFIG["status_forcelist"])
         _logging_level = logging_level if logging_level is not None else API_CONFIG["logging_level_int"]
-        _max_workers_config = API_CONFIG.get("max_workers") # Could be None from config
+        _max_workers_config = API_CONFIG.get("max_workers") # Value from config can be None
         _max_workers = max_workers if max_workers is not None else _max_workers_config
 
         logging.basicConfig(level=_logging_level, format='%(asctime)s-%(levelname)s-%(message)s')
@@ -78,10 +76,11 @@ class APIClient:
             connect=_max_retries,
             backoff_factor=_backoff_factor,
             status_forcelist=_status_forcelist,
-            allowed_methods=None # Retry for all methods by default
+            allowed_methods=None # Retry for all HTTP methods by default
         )
 
-        if _max_workers is None: # If still None after checking arg and config
+        # If max_workers is still None after checking argument and config, calculate default.
+        if _max_workers is None:
             _max_workers = min(32, (os.cpu_count() or 1) + 4)
         
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=_max_workers)
@@ -89,8 +88,8 @@ class APIClient:
 
         adapter = HTTPAdapter(
             max_retries=retry_strategy,
-            pool_connections=_max_workers, # Match pool connections to workers
-            pool_maxsize=_max_workers   # Match pool maxsize to workers
+            pool_connections=_max_workers, # Match pool connections to worker count
+            pool_maxsize=_max_workers   # Match pool maxsize to worker count
         )
         self.session.mount('http://', adapter)
         self.session.mount('https://', adapter)

@@ -1,38 +1,50 @@
 from datetime import datetime, timezone
+from typing import Any
 
 
-def search_json(json_obj, search_string):
-    """
-    Searches for a string in a JSON object (dict or list) across all levels against the key names and values.
-    :param json_obj:
-    :param search_string:
-    :return:
+def search_json(json_obj: Any, search_string: str) -> bool:
+    """Recursively searches for a string within a JSON-like object.
+
+    Checks both keys (if a dictionary) and string values for the presence
+    of `search_string`.
+
+    Args:
+        json_obj: The JSON-like object (dict, list, or string) to search.
+        search_string: The string to search for.
+
+    Returns:
+        True if the string is found, False otherwise.
     """
     if isinstance(json_obj, dict):
         for key, value in json_obj.items():
-            if search_json(value, search_string):
+            if isinstance(key, str) and search_string in key: # Check keys
+                return True
+            if search_json(value, search_string): # Recurse on values
                 return True
     elif isinstance(json_obj, list):
         for item in json_obj:
-            if search_json(item, search_string):
+            if search_json(item, search_string): # Recurse on list items
                 return True
     elif isinstance(json_obj, str):
-        if search_string in json_obj:
+        if search_string in json_obj: # Base case: string found
             return True
     return False
 
 
-def datetime_converter(iso_string_with_z) -> datetime:
-    """
-    Snyk API returns datetime strings that may not play nicely with
-    Python's datetime library, especially when they include fractional seconds.
-    Parses an ISO 8601 string ending with 'Z' (and potentially fractional seconds)
-    into a timezone-aware datetime object (UTC).
-    Example input: '2025-03-01T07:10:35.20124Z'
-    """
+def datetime_converter(iso_string_with_z: str) -> datetime:
+    """Converts an ISO 8601 string (ending with 'Z') to a timezone-aware datetime object.
 
-    # Remove the 'Z' suffix
-    datetime_str_part = iso_string_with_z[:-1]
+    Snyk API datetime strings may include fractional seconds and a 'Z' suffix,
+    which this function handles.
+
+    Args:
+        iso_string_with_z: The ISO 8601 datetime string, e.g.,
+            '2025-03-01T07:10:35.20124Z'.
+
+    Returns:
+        A timezone-aware datetime object (UTC).
+    """
+    datetime_str_part = iso_string_with_z[:-1] # Remove the 'Z' suffix
 
     # Determine the correct format string based on presence of fractional seconds
     if '.' in datetime_str_part:
@@ -40,10 +52,7 @@ def datetime_converter(iso_string_with_z) -> datetime:
     else:
         format_string = "%Y-%m-%dT%H:%M:%S"
 
-    # Parse the string to a naive datetime object
     dt_naive = datetime.strptime(datetime_str_part, format_string)
-
-    # Make the datetime object timezone-aware by setting its timezone to UTC
-    dt_aware = dt_naive.replace(tzinfo=timezone.utc)
+    dt_aware = dt_naive.replace(tzinfo=timezone.utc) # Make timezone-aware (UTC)
 
     return dt_aware
