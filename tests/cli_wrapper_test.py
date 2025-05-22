@@ -14,7 +14,7 @@ if __name__ == "__main__":
     snyk_cli = CLIWrapper()  # Instantiate the CLIWrapper class
     snyk_cli.flight_check(minimum_version='1.1295.4')  # Check Snyk CLI presence and version
 
-    snyk_cli.change_directory(snyk_cli.project_directory)  # Change to your git repo directory
+    snyk_cli.change_directory('/Users/timgowan/git/snyker')  # Change to your git repo directory
     # Get the orgId from the asset
     repository_url = 'https://github.com/tim-snyk/vulnado'
     assets = snyk_cli.find_assets_from_repository_url(repository_url)  # Find the asset(s) from the repository URL
@@ -36,6 +36,7 @@ if __name__ == "__main__":
             'monitor': None,
             '--org': org_id,
             '--remote-repo-url': repository_url,
+            '--command': 'python3', # Attempt to specify python3
             '--tags': 'snyker=test,report=true',
             '--project-business-criticality': snyk_cli.get_business_criticality_from_asset(asset),
             '--project-lifecycle': snyk_cli.get_lifecycle_from_asset(asset),

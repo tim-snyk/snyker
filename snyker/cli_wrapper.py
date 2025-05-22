@@ -1,8 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional, Dict
 if TYPE_CHECKING:
-    from snyker import Asset, APIClient
+    pass # Keep for other type-checking only imports if any
 
+from snyker import Asset, APIClient # Ensure Asset and APIClient are imported for runtime
 from snyker import GroupPydanticModel
 import os
 import subprocess
