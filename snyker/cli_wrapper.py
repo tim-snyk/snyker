@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional
 if TYPE_CHECKING:
     from snyker import Asset
-from snyker import Group
 
+from snyker import Group
 import os
 import subprocess
 import traceback
@@ -133,19 +133,17 @@ class CLIWrapper:
         :return: orgId, None
         """
         org_id = None
-        for asset in assets:
-            if len(asset.organizations) > 1:
-                self.logger.warning(f"[CLI].find_org_id_from_assets [Asset: {asset.id}]associated with more than one "
-                                    f"organization. Please specify index of the organization ID from the following:"
-                                    f" {asset.organizations}")
-            elif len(asset.organizations) == 1:
-                org_id = asset.organizations[0].id
-                self.logger.info(f"[CLI].find_org_id_from_assets [Asset: {asset.id}] matched with [Organization: "
-                                 f"{asset.organizations[0].id}")
-                break
-            else:
-                self.logger.warning(
-                    f"[CLI].find_org_id_from_assets {repository_url} not associated with any organization.")
+        if len(asset.organizations) > 1:
+            self.logger.warning(f"[CLI].find_org_id_from_assets [Asset: {asset.id}]associated with more than one "
+                                f"organization. Please specify index of the organization ID from the following:"
+                                f" {asset.organizations}")
+        elif len(asset.organizations) == 1:
+            org_id = asset.organizations[0].id
+            self.logger.info(f"[CLI].find_org_id_from_assets [Asset: {asset.id}] matched with [Organization: "
+                             f"{asset.organizations[0].id}")
+        else:
+            self.logger.warning(
+                f"[CLI].find_org_id_from_assets {repository_url} not associated with any organization.")
         return org_id if org_id is not None else None
 
     def get_business_criticality_from_asset(self, asset: Asset = None):

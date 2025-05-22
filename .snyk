@@ -1,0 +1,14 @@
+# Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
+version: v1.25.1
+# ignores vulnerabilities until expiry date; change duration by modifying expiry date
+ignore:
+patch: {}
+
+metadata:
+  name: snyker
+  title: Snyker
+spec:
+  type: package
+  owner: Tim.Gowan@snyk.io
+  lifecycle: Development
+  system: Snyk-API-SDK
