@@ -8,7 +8,8 @@ Prerequisites:
 - Ensure the 'snyker' package is installed.
 - Set the SNYK_TOKEN environment variable with a Snyk Group-scoped Service Account token.
 """
-from snyker import GroupPydanticModel, APIClient # Updated import
+from importlib import metadata # For fetching SDK version
+from snyker import GroupPydanticModel, APIClient
 import os
 
 def main():
@@ -37,12 +38,12 @@ def main():
         test_group_id = "9365faba-3e72-4fda-9974-267779137aa6" 
         group = GroupPydanticModel.get_instance(api_client=api_client, group_id=test_group_id)
         print(f"Successfully connected to Snyk Group: '{group.name}' (ID: {group.id})")
-        # You can get the SDK version from pyproject.toml if needed, e.g., using importlib.metadata
-        # For now, keeping the placeholder or removing it.
-        # from importlib import metadata
-        # sdk_version = metadata.version("snyker")
-        # print(f"SDK Version: {sdk_version}")
-        print(f"SDK Version (example): snyker 0.1.0") # Placeholder
+        # Get and print the SDK version dynamically
+        try:
+            sdk_version = metadata.version("snyker")
+            print(f"SDK Version: {sdk_version}")
+        except metadata.PackageNotFoundError:
+            print("SDK Version: snyker (version not found, package may not be installed in editable mode or distribution not found)")
 
     except ValueError as e:
         print(f"Error initializing Snyk Group: {e}")
