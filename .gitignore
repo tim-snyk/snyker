@@ -5,6 +5,9 @@
 # JetBrains IDEs (like PyCharm, IntelliJ IDEA)
 .idea/
 
+# VSCode
+.vscode/
+
 # Python virtual environment
 # Common names for virtual environments
 .venv/

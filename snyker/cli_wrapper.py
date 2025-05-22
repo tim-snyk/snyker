@@ -12,16 +12,49 @@ import json
 
 class CLIWrapper:
     def __init__(self,
-                 group: Optional['Group'] = None):
-        self.project_directory = os.getenv('GITHUB_WORKSPACE') or os.getenv('CI_PROJECT_DIR') or os.getenv(
-            'WORKSPACE') or os.getenv('BUILD_SOURCESDIRECTORY')
+                 group: Optional['Group'] = None,
+                 project_directory_override: Optional[str] = None):
         self.org_id = None
         self.group = Group()
         self.api_client = self.group.api_client
         self.logger = self.api_client.logger
         self.assets = None
+        self.project_directory = None  # Initialize to None
 
-    def change_directory(self, directory: str = None):
+        if project_directory_override:
+            self.project_directory = project_directory_override
+            self.logger.info(f"[CLI].__init__: Using explicitly provided project directory: {self.project_directory}")
+        else:
+            known_ci_vars = [
+                ('GITHUB_WORKSPACE', 'GitHub Actions'),
+                ('CI_PROJECT_DIR', 'GitLab CI'),
+                ('BITBUCKET_CLONE_DIR', 'Bitbucket Pipelines'),
+                ('CIRCLE_WORKING_DIRECTORY', 'CircleCI'),
+                ('WORKSPACE', 'Jenkins / Generic'),
+                ('BUILD_SOURCESDIRECTORY', 'Azure DevOps'),
+            ]
+            detected_ci_env = "Unknown"
+
+            for var_name, ci_name in known_ci_vars:
+                path = os.getenv(var_name)
+                if path:
+                    self.project_directory = path
+                    detected_ci_env = ci_name
+                    self.logger.info(
+                        f"[CLI].__init__: Detected {detected_ci_env} environment. "
+                        f"Using project directory: {self.project_directory} (from ${var_name})"
+                    )
+                    break
+            
+            if not self.project_directory:
+                checked_vars_str = ", ".join([f"${var}" for var, _ in known_ci_vars])
+                self.logger.warning(
+                    "[CLI].__init__: Could not automatically determine project directory from known CI/CD "
+                    f"environment variables. Checked: {checked_vars_str}. "
+                    "Current directory will be used if not explicitly changed by change_directory()."
+                )
+
+    def change_directory(self, directory: Optional[str] = None):
         """
         Changes the current working directory to the git directory if set.
         :return:
@@ -31,10 +64,12 @@ class CLIWrapper:
             self.logger.info(f"[CLI].change_directory: {directory}")
         elif self.project_directory is not None:
             os.chdir(self.project_directory)
-            self.logger.info(f"[CLI].change_directory: {directory}")
+            self.logger.info(f"[CLI].change_directory to: {self.project_directory}")
         else:
-            self.logger.warning("GITHUB_WORKSPACE, CI_PROJECT_DIR, WORKSPACE or BUILD_SOURCESDIRECTORY environment "
-                                "variables not set. Current directory remains unchanged.")
+            self.logger.warning(
+                "[CLI].change_directory: No project directory was automatically detected or explicitly set, "
+                "and no directory argument was provided. Current directory remains unchanged."
+            )
 
     def flight_check(self, minimum_version=None):
         """
@@ -61,45 +96,54 @@ class CLIWrapper:
             traceback.print_exc()
             exit(1)
 
-    def run(self, params: dict = {}, param_str: str = None) -> str:
+    def run(self, params: dict = {}, param_str: Optional[str] = None) -> subprocess.CompletedProcess:
         """
-        Runs Snyk CLI in a subprocess and returns the stdout as string
-        :return:
+        Runs Snyk CLI in a subprocess and returns the CompletedProcess object
+        :return: subprocess.CompletedProcess
         """
         try:
-            # Run Snyk code test and capture JSON output
             if param_str:
                 command = param_str.split(' ')
             else:
                 command = ['snyk']
                 for key, value in params.items():
-                    if value == ('' or None):
+                    if value == ('' or None): # Handles cases like {'--all-projects': None} or {'--all-projects': ''}
                         command.append(f'{key}')
                     else:
                         command.append(f'{key}={value}')
             self.logger.info(f"[CLI].run Command: {' '.join(command)}")
-            result = subprocess.run(command, capture_output=True, text=True)
-            # Debug run command by examining the output
-            # Print output stream until subprocess returns
-            self.logger.debug(f"[CLI].run stdout: {result.stdout}")
-            if result.stdout:
-                self.logger.info(f"[CLI].run: returned code {result.returncode} ")
+            result = subprocess.run(command, capture_output=True, text=True, check=False) # check=False to handle non-zero exits manually
+
             if result.stderr:
-                self.logger.warning(result.stderr)
-            else:
-                self.logger.info(f"[CLI].run Completed running Snyk CLI with params: {' '.join(command)}")
-                return result
+                self.logger.warning(f"[CLI].run stderr: {result.stderr.strip()}")
+            
+            if result.stdout:
+                self.logger.info(f"[CLI].run: returned code {result.returncode}")
+                self.logger.debug(f"[CLI].run stdout: {result.stdout.strip()[:500]}...") # Log a snippet
+            else: # No stdout, could be an error or command that doesn't produce stdout
+                self.logger.info(f"[CLI].run: returned code {result.returncode} with no stdout.")
+                if result.returncode != 0 and not result.stderr: # Error but no stderr
+                    self.logger.error(f"[CLI].run: Command failed with code {result.returncode} but no stderr/stdout.")
+            return result
+
+        except FileNotFoundError:
+            self.logger.error(f"[CLI].run Error: Snyk command not found. Ensure Snyk CLI is installed and in PATH.")
+            exit(1)
         except Exception as e:
             self.logger.error(f"[CLI].run Error: {e}")
             traceback.print_exc()
-            exit(1)
+            exit(1) # Or return None / raise depending on desired error handling
 
-    def find_assets_from_repository_url(self, repository_url: str = None) -> List[Asset]:
+    def find_assets_from_repository_url(self, repository_url: Optional[str] = None) -> List[Asset]:
         '''
         Find the Asset from the repository_url
         :param repository_url:
         :return: Asset objects
         '''
+        if not repository_url:
+            self.logger.warning("[CLI].find_assets_from_repository_url: repository_url is None. Cannot find assets.")
+            return []
+
         query = {
             "query": {
                 "attributes": {
@@ -113,101 +157,80 @@ class CLIWrapper:
                         {
                             "attribute": "name",
                             "operator": "contains",
-                            "values": [repository_url.split('/')[-1]]  # Extracting the repo name from the URL
+                            "values": [repository_url.split('/')[-1]]
                         }
                     ]
                 }
             }
         }
         self.assets = self.group.get_assets(query=query)
-        self.logger.info(f"[CLI].find_assets_from_repository_url Found {len(self.assets)} assets for {repository_url}")
-        if self.assets is None:
+        if not self.assets: # self.assets could be None or an empty list
             self.logger.warning(f"[CLI].find_assets_from_repository_url No assets found for {repository_url}")
-            return None
+            return []
+        self.logger.info(f"[CLI].find_assets_from_repository_url Found {len(self.assets)} assets for {repository_url}")
         return self.assets
 
-    def find_org_id_from_asset(self, asset: Asset = None) -> str:
+    def find_org_id_from_asset(self, asset: Optional[Asset] = None) -> Optional[str]:
         """
         Get the orgId from the Asset object
         :param asset: Asset object
-        :return: orgId, None
+        :return: orgId or None
         """
+        if not asset or not asset.organizations:
+            self.logger.warning(f"[CLI].find_org_id_from_asset: Asset is None or has no organizations. Asset ID: {asset.id if asset else 'N/A'}")
+            return None
+
         org_id = None
         if len(asset.organizations) > 1:
-            self.logger.warning(f"[CLI].find_org_id_from_assets [Asset: {asset.id}]associated with more than one "
-                                f"organization. Please specify index of the organization ID from the following:"
-                                f" {asset.organizations}")
+            self.logger.warning(f"[CLI].find_org_id_from_assets [Asset: {asset.id}] associated with more than one "
+                                f"organization. Please specify index of the organization ID from the following: "
+                                f"{[org.id for org in asset.organizations]}")
+            # Potentially return the first one or None, depending on desired behavior for multiple orgs
+            # For now, returning None to force disambiguation if this case is critical.
+            # org_id = asset.organizations[0].id # Or handle as an error / prompt
         elif len(asset.organizations) == 1:
             org_id = asset.organizations[0].id
-            self.logger.info(f"[CLI].find_org_id_from_assets [Asset: {asset.id}] matched with [Organization: "
-                             f"{asset.organizations[0].id}")
-        else:
+            self.logger.info(f"[CLI].find_org_id_from_assets [Asset: {asset.id}] matched with [Organization: {org_id}]")
+        else: # len(asset.organizations) == 0
             self.logger.warning(
-                f"[CLI].find_org_id_from_assets {repository_url} not associated with any organization.")
-        return org_id if org_id is not None else None
+                f"[CLI].find_org_id_from_assets [Asset: {asset.id}] not associated with any organization.")
+        return org_id
 
-    def get_business_criticality_from_asset(self, asset: Asset = None):
+    def get_business_criticality_from_asset(self, asset: Optional[Asset] = None) -> Optional[str]:
         '''
         Get the business criticality mapping from the Asset's asset_class
         :param asset:
-        :return: Criticality as a string
+        :return: Criticality as a string or None
         '''
-        return {1: 'critical', 2: 'high', 3: 'medium', 4: 'low'}[int(asset.asset_class.get('rank'))]
+        if not asset or not hasattr(asset, 'asset_class') or not asset.asset_class or 'rank' not in asset.asset_class:
+            self.logger.warning(f"[CLI].get_business_criticality_from_asset: Asset {asset.id if asset else 'N/A'} has no asset_class or rank.")
+            return None
+        try:
+            rank = int(asset.asset_class.get('rank'))
+            mapping = {1: 'critical', 2: 'high', 3: 'medium', 4: 'low'}
+            return mapping.get(rank)
+        except (ValueError, TypeError):
+            self.logger.warning(f"[CLI].get_business_criticality_from_asset: Invalid rank '{asset.asset_class.get('rank')}' for asset {asset.id}.")
+            return None
 
-    def get_lifecycle_from_asset(self, asset: Asset = None):
+
+    def get_lifecycle_from_asset(self, asset: Optional[Asset] = None) -> Optional[str]:
         '''
         Get the lifecycle mapping from the Asset's app_lifecycle
         :param asset:
-        :return: Lifecycle as a string
+        :return: Lifecycle as a string or None
         '''
+        if not asset or not hasattr(asset, 'app_lifecycle'):
+            self.logger.warning(f"[CLI].get_lifecycle_from_asset: Asset {asset.id if asset else 'N/A'} has no app_lifecycle attribute.")
+            return None
+
         if asset.app_lifecycle and asset.app_lifecycle in ['production', 'development', 'sandbox']:
             return asset.app_lifecycle
         elif asset.app_lifecycle is None:
             self.logger.warning(f"[CLI].get_lifecycle_from_asset No lifecycle found for asset {asset.id}.")
+            return None # Explicitly return None
         else:
             self.logger.warning(
-                f"[CLI].get_lifecycle_from_asset asset.app_lifecycle definition is incompatible for asset "
+                f"[CLI].get_lifecycle_from_asset asset.app_lifecycle definition ('{asset.app_lifecycle}') is incompatible for asset "
                 f"{asset.id}. Defaulting to 'Development'")
-            return 'Development'
-
-
-if __name__ == "__main__":
-    # Example usage
-    snyk_cli = CLIWrapper()  # Instantiate the CLIWrapper class
-    snyk_cli.flight_check(minimum_version='1.1295.4')  # Check Snyk CLI presence and version
-
-    snyk_cli.change_directory(snyk_cli.project_directory)  # Change to your git repo directory
-    # Get the orgId from the asset
-    repository_url = 'https://github.com/tim-snyk/vulnado'
-    assets = snyk_cli.find_assets_from_repository_url(repository_url)  # Find the asset(s) from the repository URL
-    if len(assets) == 1:
-        asset = assets[0]  # Assign it to singular Asset object
-    org_id = snyk_cli.find_org_id_from_asset(asset)  # Find the org_id from the Asset object
-
-    playbook = [
-        {
-            'test': None,
-            '--org': org_id,
-        },
-        {
-            'code': None,
-            'test': None,
-            '--org': org_id,
-        },
-        {
-            'monitor': None,
-            '--org': org_id,
-            '--remote-repo-url': repository_url,
-            '--tags': 'snyker=test,report=true',
-            '--project-business-criticality': snyk_cli.get_business_criticality_from_asset(asset),
-            '--project-lifecycle': snyk_cli.get_lifecycle_from_asset(asset),
-            '--project-environment': 'backend'
-        },
-    ]
-    # Run the playbook which is an extensible queue of commands to execute
-    while len(playbook) > 0:
-        task = playbook.pop(0)
-        snyk_cli.run(task)  # Run the task with the Snyk CLI
-    snyk_cli.change_directory('/Users/timgowan/git/juice-shop')  # Change to a specific git repo directory
-    result = snyk_cli.run(param_str=f'snyk code test --org={org_id} --json')
-    result = json.loads(result.stdout)  # Parse the JSON output
+            return 'Development' # Or None if default is not desired
