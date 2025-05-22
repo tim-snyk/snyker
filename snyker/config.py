@@ -13,7 +13,7 @@ DEFAULT_API_CLIENT_CONFIG = {
     "logging_level": "INFO",
     "max_workers": None,  # If None, will be calculated as min(32, os.cpu_count() + 4)
     "default_rate_limit_retry_after": 5.0,
-    "loading_strategy": "lazy" # Options: "lazy", "eager"
+    "loading_strategy": "eager" # Options: "lazy", "eager" -> Changed to eager
 }
 
 def get_logging_level_from_string(level_str: str) -> int:

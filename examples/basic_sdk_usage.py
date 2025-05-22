@@ -40,7 +40,6 @@ def main():
     """
     Demonstrates core functionalities of the snyker SDK.
     """
-
     # Check for SNYK_TOKEN
     snyk_token = os.getenv("SNYK_TOKEN")
     if not snyk_token:
@@ -72,56 +71,102 @@ def main():
         api_client.close()
         return
 
-    # --- Generate Snyk Entity Summary ---
-    print("\n--- Snyk Entity Summary ---")
-    total_group_issues = 0
-    try:
-        print(f"Group: {group.name} (ID: {group.id})")
+    # --- Data Fetching with Running Counts ---
+    print("\n--- Starting Data Fetching ---")
+    fetched_data = {
+        "group_name": group.name,
+        "group_id": group.id,
+        "organizations": []
+    }
+    total_orgs_fetched = 0
+    total_projects_fetched = 0
+    total_issues_fetched = 0
 
-        # Fetch organizations for the group
-        # Using group.organizations property which triggers lazy/eager loading
-        organizations: List[OrganizationPydanticModel] = group.organizations
-        print(f"  ├─ Organizations ({len(organizations)}):")
+    try:
+        print(f"Fetching organizations for Group: {group.name} (ID: {group.id})...")
+        # Explicitly fetch all organizations. SDK uses lazy loading by default for properties.
+        organizations: List[OrganizationPydanticModel] = group.fetch_organizations()
+        total_orgs_fetched = len(organizations)
+        print(f"Fetched {total_orgs_fetched} organization(s).")
 
         for org_idx, org in enumerate(organizations):
-            is_last_org = org_idx == len(organizations) - 1
+            print(f"  Fetching projects for Organization {org_idx+1}/{total_orgs_fetched}: {org.name} (ID: {org.id})...")
+            # Explicitly fetch all projects for the organization.
+            projects: List[ProjectPydanticModel] = org.fetch_projects()
+            current_org_projects_fetched = len(projects)
+            total_projects_fetched += current_org_projects_fetched
+            print(f"    Fetched {current_org_projects_fetched} project(s) for Org '{org.name}'. Running total projects: {total_projects_fetched}")
+
+            org_data = {
+                "name": org.name,
+                "id": org.id,
+                "projects": [],
+                "total_issues_in_org": 0
+            }
+
+            for proj_idx, proj in enumerate(projects):
+                print(f"      Fetching issues for Project {proj_idx+1}/{current_org_projects_fetched}: {shorten_project_name(proj.name)} (ID: {proj.id})...")
+                # Explicitly fetch all issues for the project.
+                # To get all issues regardless of status, you might need to pass params.
+                # For this example, we use the default (likely 'open' issues).
+                # issues: List[IssuePydanticModel] = proj.fetch_issues(params={'status': 'open,ignored'}) # Example
+                issues: List[IssuePydanticModel] = proj.fetch_issues()
+                project_issue_count = len(issues)
+                total_issues_fetched += project_issue_count
+                org_data["total_issues_in_org"] += project_issue_count
+                print(f"        Fetched {project_issue_count} issue(s) for Project '{shorten_project_name(proj.name)}'. Running total issues: {total_issues_fetched}")
+                
+                org_data["projects"].append({
+                    "name": proj.name, # Store original name for potential full display
+                    "display_name": shorten_project_name(proj.name),
+                    "id": proj.id,
+                    "type": proj.project_type,
+                    "issue_count": project_issue_count
+                })
+            fetched_data["organizations"].append(org_data)
+        
+        print("\n--- Data Fetching Complete ---")
+        print(f"Total Organizations Fetched: {total_orgs_fetched}")
+        print(f"Total Projects Fetched: {total_projects_fetched}")
+        print(f"Total Issues Fetched (default filters): {total_issues_fetched}")
+
+    except Exception as e:
+        print(f"An error occurred during data fetching: {e}")
+        import traceback
+        traceback.print_exc()
+        api_client.close()
+        return
+
+    # --- Generate Snyk Entity Summary from Fetched Data ---
+    print("\n--- Snyk Entity Summary ---")
+    try:
+        print(f"Group: {fetched_data['group_name']} (ID: {fetched_data['group_id']})")
+        print(f"  ├─ Organizations ({len(fetched_data['organizations'])}):")
+
+        for org_idx, org_data in enumerate(fetched_data["organizations"]):
+            is_last_org = org_idx == len(fetched_data["organizations"]) - 1
             org_prefix = "  │  " if not is_last_org else "     "
             org_branch = "  ├─" if not is_last_org else "  └─"
             
-            print(f"{org_branch} Organization: {org.name} (ID: {org.id})")
-
-            # Fetch projects for the organization
-            # Using org.projects property
-            projects: List[ProjectPydanticModel] = org.projects
-            print(f"{org_prefix}  ├─ Projects ({len(projects)}):")
+            print(f"{org_branch} Organization: {org_data['name']} (ID: {org_data['id']})")
+            print(f"{org_prefix}  ├─ Projects ({len(org_data['projects'])}):")
             
-            org_total_issues = 0
-            for proj_idx, proj in enumerate(projects):
-                is_last_proj = proj_idx == len(projects) - 1
-                proj_prefix = f"{org_prefix}  │  " if not is_last_proj else f"{org_prefix}     "
+            for proj_idx, proj_data in enumerate(org_data["projects"]):
+                is_last_proj = proj_idx == len(org_data["projects"]) - 1
                 proj_branch = f"{org_prefix}  ├─" if not is_last_proj else f"{org_prefix}  └─"
-
-                # Fetch issues for the project
-                # Using proj.issues property
-                issues: List[IssuePydanticModel] = proj.issues
-                project_issue_count = len(issues)
-                org_total_issues += project_issue_count
-                total_group_issues += project_issue_count
                 
-                display_name = shorten_project_name(proj.name)
-                print(f"{proj_branch} Project: {display_name} (ID: {proj.id}, Type: {proj.project_type}, Issues: {project_issue_count})")
+                print(f"{proj_branch} Project: {proj_data['display_name']} (ID: {proj_data['id']}, Type: {proj_data['type']}, Issues: {proj_data['issue_count']})")
 
-            print(f"{org_prefix}  └─ Total Issues in Org '{org.name}': {org_total_issues}")
+            print(f"{org_prefix}  └─ Total Issues in Org '{org_data['name']}': {org_data['total_issues_in_org']}")
             if is_last_org:
-                print(f"     └─ (End of Org '{org.name}')")
+                print(f"     └─ (End of Org '{org_data['name']}')")
             else:
                 print(f"  │")
 
-
-        print(f"\nTotal Issues in Group '{group.name}': {total_group_issues}")
+        print(f"\nTotal Issues in Group '{fetched_data['group_name']}': {total_issues_fetched}")
 
     except Exception as e:
-        print(f"An error occurred while generating the summary: {e}")
+        print(f"An error occurred while printing the summary: {e}")
         import traceback
         traceback.print_exc()
 
