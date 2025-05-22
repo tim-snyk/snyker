@@ -95,7 +95,7 @@ def main():
             projects: List[ProjectPydanticModel] = org.fetch_projects()
             current_org_projects_fetched = len(projects)
             total_projects_fetched += current_org_projects_fetched
-            print(f"    Fetched {current_org_projects_fetched} project(s) for Org '{org.name}'. Running total projects: {total_projects_fetched}")
+            print(f"    Fetched {current_org_projects_fetched} project(s) for Org '{org.name}'.")
 
             org_data = {
                 "name": org.name,
@@ -107,14 +107,15 @@ def main():
             for proj_idx, proj in enumerate(projects):
                 print(f"      Fetching issues for Project {proj_idx+1}/{current_org_projects_fetched}: {shorten_project_name(proj.name)} (ID: {proj.id})...")
                 # Explicitly fetch all issues for the project.
-                # To get all issues regardless of status, you might need to pass params.
-                # For this example, we use the default (likely 'open' issues).
-                # issues: List[IssuePydanticModel] = proj.fetch_issues(params={'status': 'open,ignored'}) # Example
-                issues: List[IssuePydanticModel] = proj.fetch_issues()
+                issue_params = {}
+                print(f"        Fetching issues with params: {issue_params}...")
+                issues: List[IssuePydanticModel] = proj.fetch_issues(params=issue_params)
                 project_issue_count = len(issues)
                 total_issues_fetched += project_issue_count
                 org_data["total_issues_in_org"] += project_issue_count
-                print(f"        Fetched {project_issue_count} issue(s) for Project '{shorten_project_name(proj.name)}'. Running total issues: {total_issues_fetched}")
+                
+                first_issue_id_log = f", First issue ID: {issues[0].id}" if issues else ""
+                print(f"        Fetched {project_issue_count} issue(s) for Project '{shorten_project_name(proj.name)}'{first_issue_id_log}.")
                 
                 org_data["projects"].append({
                     "name": proj.name, # Store original name for potential full display
@@ -128,7 +129,7 @@ def main():
         print("\n--- Data Fetching Complete ---")
         print(f"Total Organizations Fetched: {total_orgs_fetched}")
         print(f"Total Projects Fetched: {total_projects_fetched}")
-        print(f"Total Issues Fetched (default filters): {total_issues_fetched}")
+        print(f"Total Issues Fetched (with status filters 'open,resolved,ignored'): {total_issues_fetched}")
 
     except Exception as e:
         print(f"An error occurred during data fetching: {e}")
