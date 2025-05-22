@@ -36,7 +36,141 @@ wheels/
 # so I will comment it out. If you want to ignore it, uncomment the line below.
 # uv.lock
 
+<<<<<<< HEAD
 # If you have other specific log files or temporary files, add them here.
 # For example:
 # *.log
 # tmp/
+=======
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# PEP 582; __pypackages__ directory
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# VSCode specific
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs (like PyCharm, IntelliJ IDEA)
+.idea/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created by macOS storing log files
+# Private folder (contains /var/folders, /var/log, etc.)
+private/
+
+# Snyk specific (policy file is usually .snyk)
+# If the .snyk file itself should be committed (e.g. for shared policy),
+# then this line should be more specific or removed.
+# For now, assuming the .snyk file in the root is important.
+# .snyk/ # Example: ignore .snyk directory if it contains user-specific state
+
+# dotenv
+.env.*
+
+# poetry.lock and uv.lock are typically committed, so not listed here.
+# .python-version is typically committed.
+>>>>>>> a25d202 (feat: Update SDK docs, .gitignore, add GH Actions & CONTRIBUTING.md, enhance example script)

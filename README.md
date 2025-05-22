@@ -69,3 +69,67 @@ poetry run python examples/basic_sdk_usage.py
 The script will initialize the `APIClient`, connect to your Snyk Group (it's currently hardcoded in the example to use a specific test Group ID; you might need to adjust this if that ID isn't relevant for your token), and demonstrate fetching various Snyk entities like organizations, projects, and issues. The output will be logged to your console, showing INFO level messages by default.
 
 This should provide a good starting point for understanding how to use the `snyker` SDK.
+
+## Roadmap / Todolist
+
+This section outlines planned features and areas for future development. Contributions are welcome! Please see `CONTRIBUTING.md`.
+
+### Core SDK Enhancements
+-   **Expand Snyk API Coverage**:
+    -   **Currently Implemented Entities/Concepts**:
+        -   API Client (`APIClient`)
+        -   Groups (`GroupPydanticModel`)
+        -   Organizations (`OrganizationPydanticModel`)
+        -   Projects (`ProjectPydanticModel`)
+        -   Assets (`Asset` - primarily repository type)
+        -   Issues (`IssuePydanticModel`)
+        -   Policies (`PolicyPydanticModel`)
+        -   CLI Wrapper (`CLIWrapper`) for Snyk CLI interactions.
+        -   Configuration management (from `pyproject.toml` and environment variables).
+    -   **Areas for Expansion (Unimplemented Snyk API Functions)**:
+        -   **User Management**: Listing users, inviting users, managing service accounts.
+        -   **Reporting**: Generating and fetching various Snyk reports.
+        -   **Audit Logs**: Accessing audit trails for Snyk activities.
+        -   **License Compliance**: Deeper integration with Snyk's license management features.
+        -   **Cloud Security**:
+            -   Snyk IaC: More detailed interaction with IaC settings, test results.
+            -   Snyk Cloud: Managing cloud environments, posture checks.
+        -   **Container Security**: Detailed management of container image scanning results and settings.
+        -   **Targets/Integrations**: More granular control over Snyk Targets and integration settings beyond basic project linking.
+        -   **Project Settings**: Programmatic modification of project settings (e.g., test frequency, notifications).
+        -   **Issue Management**: Actions like ignoring issues, assigning issues via API.
+        -   **Collections**: Working with Snyk Collections.
+        -   **More Asset Types**: Support for other asset types beyond repositories.
+-   **Refine Error Handling**: More specific custom exceptions.
+-   **Async Support**: Introduce an asynchronous version of the `APIClient` and SDK methods.
+-   **Enhanced CLI Wrapper**: Add more Snyk CLI commands and parsing capabilities to `CLIWrapper`.
+
+### MCP (Model Context Protocol) Server
+-   **Develop an MCP Server**:
+    -   **Purpose**: To provide an external, stateful service that can enhance the capabilities of AI agents using the Snyker SDK.
+    -   **Deployment**: Design to be deployed as a container (e.g., Docker).
+    -   **Persistence**: Incorporate memory/data persistence (e.g., using a lightweight database like SQLite, or a more robust solution if needed) to store:
+        -   Cached Snyk data to reduce API calls.
+        -   User preferences or configurations for the MCP server.
+        -   Stateful information related to ongoing operations or analyses.
+    -   **Tools/Resources**: Expose tools and resources via MCP that leverage the Snyker SDK, for example:
+        -   A tool to "get_critical_vulnerabilities_for_org" which uses the SDK to fetch projects and issues, then filters.
+        -   A resource representing the "current_snyk_group_summary".
+-   **Documentation**: Provide clear documentation on how to build, deploy, and use the Snyker MCP server.
+
+### Testing and CI/CD
+-   **Expand Test Coverage**: Increase unit and integration test coverage for all SDK components.
+    -   Include tests for various Snyk API response scenarios (e.g., empty results, errors, different data structures).
+-   **Mocking**: Improve mocking for Snyk API calls in tests to make them faster and more reliable.
+-   **GitHub Actions**:
+    -   Enhance the existing workflow (`python-tests.yml`) to include:
+        -   Linting (e.g., with Flake8 or Ruff).
+        -   Code formatting checks (e.g., with Black).
+        -   Building and publishing the package on new releases (e.g., to PyPI).
+
+### Documentation
+-   **API Reference**: Generate a comprehensive API reference documentation (e.g., using Sphinx).
+-   **Usage Examples**: Add more diverse and advanced usage examples in the `examples/` directory.
+-   **Tutorials**: Create step-by-step tutorials for common use cases.
+
+We aim to make Snyker a powerful and easy-to-use SDK for interacting with the Snyk platform. Your contributions can help make that a reality!
