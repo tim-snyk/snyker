@@ -10,14 +10,14 @@ authors = [
 ]
 description = "Collection of utilities leveraging the Snyk API and a wrapper for the Snyk CLI"
 readme = "README.md"
-license = "Apache-2.0" # Or specify license text
-requires-python = ">=3.10" # Specify the Python versions your package supports
+license = "Apache-2.0"
+requires-python = ">=3.11"
 classifiers = [
     "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
+    "License :: OSI Approved :: Apache License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
 keywords = ["snyk", "snyk-cli","snyk-cli", "automation", "security"] # Add relevant keywords
@@ -25,11 +25,7 @@ keywords = ["snyk", "snyk-cli","snyk-cli", "automation", "security"] # Add relev
 # This is the section derived from your import statements
 dependencies = [
     "requests>=2.31.0", # For 'import requests'
-    "python-dateutil",  # For 'import dateutil'
-    "urllib3",          # For 'from urllib3.util.retry import Retry'
-    "httpx>=0.28.1",    # For 'import httpx'
-    "mcp[cli]>=1.8.0",  # For 'import mcp'
-    "pygit2==1.18.0"    # For reading .git files in snyker.CLIWrapper
+    "urllib3"          # For 'from urllib3.util.retry import Retry'
 
 ]
 
@@ -41,3 +37,15 @@ dependencies = [
 # Optional: if you have command-line scripts
 # [project.scripts]
 # my-command = "my_awesome_package.module:main_function"
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^7.2.0"
+black = "^25.1.0"
+
+[tool.snyker.api_client]
+base_url = "https://api.snyk.io"
+max_retries = 15
+backoff_factor = 0.5
+status_forcelist = [429, 500, 502, 503, 504] # HTTP status codes that trigger a retry
+logging_level = "INFO" # Can be DEBUG, INFO, WARNING, ERROR
+default_rate_limit_retry_after = 5.0 # Default seconds to wait if 429 response has no Retry-After header

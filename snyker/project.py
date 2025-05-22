@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, List, Optional
 if TYPE_CHECKING:
     from snyker import APIClient, Group, Organization, Issue
 
-apiVersion = "2024-10-15"  # Set the API version.
+apiVersion = "2024-10-15"
 
 originUrls = {
     'github': 'https://github.com',
-    'github-enterprise': 'https://github.com',  # May need to be updated to use the enterprise URL
+    'github-enterprise': 'https://github.com',
     'gitlab': 'https://gitlab.com',
-    'bitbucket-server': 'https://bitbucket.org',  # May need to be updated to use the enterprise URL
+    'bitbucket-server': 'https://bitbucket.org',
     'bitbucket-cloud': 'https://bitbucket.org',
     'azure-devops': 'https://dev.azure.com',
     'azure-repos': 'https://dev.azure.com',
@@ -27,19 +27,17 @@ class Project:
                  organization: 'Organization',
                  group: Optional['Group'] = None,
                  api_client: Optional['APIClient'] = None,
-                 params: dict = {}) -> Project:
+                 params: dict = {}) -> None:
 
         self.id = project_id
         self.organization = organization
         self.group = Group() if group is None else group
         self.api_client = self.group.api_client if api_client is None else api_client
         self.logger = self.api_client.logger
-        # Getting project details because listProjectsInOrg does not provide enough metadata
-        self.raw = self.get_project(params=params)
-        self.issues = None
-        self.sarif = None
+        self.raw = self.get_project_details(params=params)
+        self.issues: Optional[List[Issue]] = None
+        self.sarif: Optional[dict] = None
 
-        # Attribute Helpers
         try:
             self.relationships = self.raw['data']['relationships']
             self.name = self.raw['data']['attributes']['name']
@@ -48,59 +46,78 @@ class Project:
             self.origin = self.raw['data']['attributes']['origin']
             self.targetId = self.raw['data']['relationships']['target']['data']['id']
             self.status = self.raw['data']['attributes']['status']
+            self.integrationId: Optional[str] = None
+            self.repoUrl: Optional[str] = None
 
         except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+            self.logger.error(f"Error initializing Project {project_id}: {e}", exc_info=True)
+            print(f"An unexpected error occurred during Project initialization: {e}")
             traceback.print_exc()
-            exit(1)
+            raise
 
-    def get_integration_ids(self) -> str:
-        '''
-        Helper function to get the integration ID from the project name and enumerated dictionary.
-        '''
-        self.organization.integrations = self.organization.listIntegrations()
-        for key in self.organization.integrations:
-            if key == self.origin:
-                self.integrationId = self.getIntegrationId()
-                if self.origin in originUrls:
-                    self.repoUrl = originUrls[self.origin] + '/' + self.name.split('(')[0]
-                return self.organization.integrations[key]
+    def get_integration_id(self) -> Optional[str]:
+        """
+        Retrieves and returns the integration ID for the project's origin.
+        It also sets self.integrationId and self.repoUrl on the project instance if found.
+        """
+        if self.organization.integrations is None:
+            self.organization.get_integrations() 
+
+        if self.organization.integrations:
+            for integration_dict in self.organization.integrations:
+                integration_name_from_api = integration_dict.get('name', '').lower()
+                project_origin_lower = self.origin.lower()
+                
+                match = (integration_name_from_api == project_origin_lower)
+                if not match:
+                    if project_origin_lower == "github-enterprise" and integration_name_from_api == "github enterprise":
+                        match = True
+                    elif project_origin_lower == "azure-repos" and integration_name_from_api == "azure repos":
+                        match = True
+                
+                if match:
+                    self.integrationId = integration_dict.get('id')
+                    if self.integrationId and self.origin in originUrls:
+                        repo_name_part = self.name.split('(')[0].strip()
+                        self.repoUrl = originUrls[self.origin] + '/' + repo_name_part
+                    
+                    self.logger.info(f"[Project: {self.id}] Matched integration for origin '{self.origin}' with ID '{self.integrationId}' and repoUrl '{getattr(self, 'repoUrl', 'N/A')}'")
+                    return self.integrationId
+        
+        self.logger.warning(f"[Project: {self.id}] No matching integration found for origin '{self.origin}'. Integrations available: {self.organization.integrations}")
         return None
 
-    def get_project(self, params: dict = {}):
+    def get_project_details(self, params: dict = {}):
         '''
-        # GET /rest/orgs/{orgId}/projects/{projectId}?version={apiVersion}
         '''
         uri = f"/rest/orgs/{self.organization.id}/projects/{self.id}"
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'{self.api_client.token}'
         }
-        params = {
-            'version': apiVersion,
-        }
-        params.update(params)
+        request_params = {'version': apiVersion}
+        request_params.update(params)
+        
         response = self.api_client.get(
             uri,
             headers=headers,
-            params=params
+            params=request_params
         )
         return response.json()
 
     def get_issues(self, params: dict = {}) -> List[Issue]:
         """
-        Inherits from Organization but enforces the project ID and type
-        :param params:
-        :return: List[Issues]
+        Fetches issues for this project by delegating to the organization.
+        :param params: Additional query parameters for fetching issues.
+        :return: List of Issue objects.
         """
-        params = {
-            'version': apiVersion,
-            'limit': 100,
+        project_specific_params = {
             'scan_item.id': self.id,
             'scan_item.type': 'project',
         }
-        params.update(params)
-        self.issues = self.organization.get_issues(params=params)
+        final_params = {**project_specific_params, **params, 'version': apiVersion, 'limit': 100}
+        
+        self.issues = self.organization.get_issues(params=final_params)
         return self.issues
 
     def testApi(self, continuous_monitor=False):
@@ -108,9 +125,16 @@ class Project:
         Experimental API
         POST /orgs/{org_id}/tests?version={apiVersion}
         '''
+        if not self.integrationId or not self.repoUrl:
+            self.get_integration_id()
+            if not self.integrationId or not self.repoUrl:
+                self.logger.error(f"[Project: {self.id}] Missing integrationId or repoUrl for testApi. Cannot proceed.")
+                return None
+
         localDelay = 5
-        apiVersion = "2024-10-14~experimental"
-        uri = f"/rest/orgs/{self.organization.id}/tests?version={apiVersion}"
+        test_api_version = "2024-10-14~experimental"
+        uri = f"{self.api_client.base_url}/rest/orgs/{self.organization.id}/tests?version={test_api_version}"
+        
         payload = {
             "data": {
                 "type": "test",
@@ -128,83 +152,103 @@ class Project:
             'Content-Type': 'application/vnd.api+json',
             'Authorization': f'{self.api_client.token}',
         }
+        
         inProgressDisplayedFlag = False
+        response_obj = None
+
         try:
             while True:
                 try:
-                    response = requests.post(
-                        uri,
-                        headers=headers,
-                        json=payload
-                    )
+                    self.logger.debug(f"Posting to testApi: {uri} with payload: {json.dumps(payload)}")
+                    response_obj = requests.post(uri, headers=headers, json=payload)
+                    response_obj.raise_for_status()
+                    self.logger.debug(f"testApi POST successful: {response_obj.status_code}")
                     break
                 except requests.exceptions.HTTPError as err:
-                    if response.status_code == 429:  # Too Many Requests
-                        self.logger.debug(f"Rate limit exceeded, retrying in {localDelay} seconds...")
+                    if err.response is not None and err.response.status_code == 429:
+                        self.logger.debug(f"Rate limit (429) on testApi POST. Retrying in {localDelay}s. Headers: {err.response.headers}")
                         time.sleep(localDelay)
-                        localDelay = min(localDelay * 2, 500)  # Exponential backoff with a maximum delay
+                        localDelay = min(localDelay * 2, 60)
+                    elif err.response is not None:
+                        self.logger.error(f"HTTP error on testApi POST: {err.response.status_code} - {err.response.text}", exc_info=True)
+                        return None
                     else:
-                        self.logger.error(f"An unexpected error occurred: {err}{response.text}")
-                        raise err
-            if response.status_code == 201:
+                        self.logger.error(f"Request error on testApi POST: {err}", exc_info=True)
+                        return None
+                except requests.exceptions.RequestException as req_err:
+                    self.logger.error(f"Generic request error on testApi POST: {req_err}", exc_info=True)
+                    return None
+
+            if response_obj and response_obj.status_code == 201:
+                polling_uri = response_obj.json().get('links', {}).get('self', {}).get('href')
+                if not polling_uri:
+                    self.logger.error("testApi POST successful, but no polling link ('links.self.href') found in response.")
+                    return None
+
+                self.logger.debug(f"Polling for test results at: {polling_uri}")
+                localDelay = 5
                 while True:
                     try:
-                        uri = response.json()['links']['self']['href']
-                        response = requests.get(
-                            uri,
-                            headers=headers
-                        )
-                        response.raise_for_status()
-                        while response.status_code in [200, 429] and response.json()['data']['attributes'][
-                            'state'] == 'in_progress':
-                            if response.status_code == 429:
-                                self.logger.debug(f"Rate limit exceeded, retrying in {localDelay} seconds...")
-                                time.sleep(localDelay)
-                                continue
-                            response = requests.get(
-                                uri,
-                                headers=headers
-                            )
-                            response.raise_for_status()
-                            state = response.json()['data']['attributes']['state']
-                            # Only want to show this once.
-                            if inProgressDisplayedFlag == False:
-                                self.logger.debug(f"    SARIF generation {state}: {self.repoUrl}")
-                                # Uncomment to make stdout less noisy with polling
-                                inProgressDisplayedFlag = True
-                            if state == 'completed':
-                                print(f"    SARIF generation {state}: {self.repoUrl}")
-                                self.logger.debug(f"    SARIF generation {state}: {self.repoUrl}")
-                                # Different API, don't need to share rate limit
-                                # print(response.json()['data']['attributes']['findings'][0]['findings_url'])
-                                response = requests.get(
-                                    response.json()['data']['attributes']['findings'][0]['findings_url']
-                                )
-                                response.raise_for_status()
-                                if response.content:
-                                    self.sarif = response.json()
-                                    return response.json()  # Finally got the SARIF
-                        break
-                    except requests.exceptions.HTTPError as err:
-                        if response.status_code == 429:  # Too Many Requests
-                            print(f"Rate limit exceeded, retrying in {localDelay} seconds...")
-                            time.sleep(localDelay)
-                            localDelay = min(localDelay * 2, 500)  # Exponential backoff with a maximum delay
-                        else:
-                            raise err
+                        poll_response = requests.get(polling_uri, headers=headers)
+                        poll_response.raise_for_status()
+                        poll_data = poll_response.json()
+                        current_state = poll_data.get('data', {}).get('attributes', {}).get('state')
+                        self.logger.debug(f"Polling state: {current_state}")
 
-        except requests.exceptions.RequestException as e:
-            print(f"Request URL: {uri}")
-            print(f"Request Payload: {json.dumps(payload, indent=4)}")
-            print(f"Error downloading file: {e}")
-            traceback.print_exc()
-        except Exception as e:
-            print(f"An unexpected error occurred: {e}")
-            traceback.print_exc()
+                        if current_state == 'in_progress':
+                            if not inProgressDisplayedFlag:
+                                self.logger.info(f"SARIF generation in progress for {getattr(self, 'repoUrl', 'N/A')}...")
+                                inProgressDisplayedFlag = True
+                            time.sleep(localDelay)
+                            localDelay = min(localDelay * 2, 30)
+                        elif current_state == 'completed':
+                            self.logger.info(f"SARIF generation completed for {getattr(self, 'repoUrl', 'N/A')}.")
+                            findings_url = poll_data.get('data',{}).get('attributes',{}).get('findings',[{}])[0].get('findings_url')
+                            if not findings_url:
+                                self.logger.error("SARIF generation completed, but no findings_url found.")
+                                return None
+                            
+                            self.logger.debug(f"Fetching SARIF from: {findings_url}")
+                            sarif_response = requests.get(findings_url)
+                            sarif_response.raise_for_status()
+                            if sarif_response.content:
+                                self.sarif = sarif_response.json()
+                                self.logger.info("SARIF data fetched and stored in self.sarif.")
+                                return self.sarif
+                            else:
+                                self.logger.warning("SARIF findings_url returned empty content.")
+                                return None
+                        elif current_state in ['failed', 'error']:
+                             self.logger.error(f"SARIF generation failed with state: {current_state}. Data: {poll_data}")
+                             return None
+                        else:
+                            self.logger.warning(f"SARIF generation in unknown state: {current_state}. Data: {poll_data}")
+                            time.sleep(localDelay)
+
+                    except requests.exceptions.HTTPError as poll_err:
+                        if poll_err.response is not None and poll_err.response.status_code == 429:
+                            self.logger.debug(f"Rate limit (429) while polling testApi. Retrying in {localDelay}s.")
+                            time.sleep(localDelay)
+                            localDelay = min(localDelay * 2, 60)
+                        elif poll_err.response is not None:
+                            self.logger.error(f"HTTP error while polling testApi: {poll_err.response.status_code} - {poll_err.response.text}", exc_info=True)
+                            return None
+                        else:
+                            self.logger.error(f"Request error while polling testApi: {poll_err}", exc_info=True)
+                            return None
+                    except Exception as e_poll:
+                        self.logger.error(f"Unexpected error during testApi polling: {e_poll}", exc_info=True)
+                        return None
+            elif response_obj:
+                 self.logger.error(f"Initial testApi POST call failed with status {response_obj.status_code}: {response_obj.text}")
+
+        except Exception as e_main:
+            self.logger.error(f"An unexpected error occurred in testApi main try block: {e_main}", exc_info=True)
+        
+        return None
 
     def getIgnoresV1(self):
         '''
-        # GET https://api.snyk.io/v1/org/orgId/project/projectId/ignores
         :return:
         '''
         uri = f"/v1/org/{self.organization.id}/project/{self.id}/ignores"
@@ -214,33 +258,23 @@ class Project:
         }
         ignores = []
         try:
-            response = self.api_client.get(
-                uri,
-                headers=headers
-            )
+            response_obj = self.api_client.get(uri, headers=headers)
+            response_data = response_obj.json()
+
+            if self.type == "sast":
+                if response_data:
+                    ignores = response_data 
+                    self.logger.debug(f"SAST ignores for project {self.id}: {json.dumps(ignores, indent=4)}")
+                else:
+                    self.logger.info(f"No SAST ignores found for project {self.id} or empty response.")
+            else:
+                self.logger.warning(f"getIgnoresV1 for non-SAST type '{self.type}' might not be fully parsed. Returning raw response.")
+                if response_data:
+                    ignores = response_data
+                
         except requests.exceptions.RequestException as e:
-            print(f"An unexpected error occurred: {e}")
-            print(f"Request URL: {uri}")
-            traceback.print_exc()
-            exit(1)
-        if self.type == "sast" and response.json():
-            ignores = response.json()
-            print(json.dumps(response.json(), indent=4))
-
-        # Capturing SCA and SCA-Container types by process of elimination
-        excluded_types = ["helmconfig", "armconfig", "cloudconfig", "terraformplan", "terraformconfig",
-                          "cloudformationconfig", "k8sconfig"]
-        if self.type in excluded_types:
-            print("Invalid scan type")
-            exit(1)
-
-        if self.type not in excluded_types and not "sast":
-            print(f"    {self.type} is not supported for ignore migration")
-            exit(1)
-            for i in response:
-                # iterate over the list of ignores if multiple ignores present in a project
-                for j in response[i]:
-                    list(j.keys())
-                    for k in j.keys():
-                        ignores.append(j[k])
+            self.logger.error(f"RequestException in getIgnoresV1 for project {self.id}, URL {uri}: {e}", exc_info=True)
+        except Exception as e:
+            self.logger.error(f"Unexpected error in getIgnoresV1 for project {self.id}: {e}", exc_info=True)
+            
         return ignores

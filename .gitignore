@@ -13,7 +13,11 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Virtual environments - ensure your specific venv name isn't committed
+# VSCode
+.vscode/
+
+# Python virtual environment
+# Common names for virtual environments
 .venv/
 venv/
 env/

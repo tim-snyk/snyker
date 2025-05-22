@@ -31,32 +31,51 @@ def main():
     may be an upcoming enhancement to the SDK but was deemed low-priority at the moment so we would need to explicitly
     assign the list upstream.
     '''
-    import json
+    import json # This import is redundant, json is already imported at the top
     for org in group.get_orgs(params={'slug': 'cli-upload-test-5jMFX8GCf5RQhAiH5K9fNs'}):
         for proj in org.get_projects(params={'origins': 'cli'}):
             print(json.dumps(proj.raw['data'], indent=4))
 
+    # Initialize group.issues if it might not have been initialized as a list in Group.__init__
+    # Based on current Group.__init__, self.issues: List[Issue] = [] so it is initialized.
+    # if group.issues is None: # This check should not be necessary
+    #    group.issues = []
+
     for org in group.orgs:
-        org.get_projects()
-        for project in org.projects:
-            group.issues.append(project.get_issues())
-    print(f"Matching sets of orgs. Total Orgs: {len(orgs)}, Total Orgs in Group: {len(group.orgs)}")
+        org.get_projects() # Populates org.projects
+        if org.projects: # Check if org.projects is not None and not empty before iterating
+            for project in org.projects:
+                issues_list = project.get_issues() # Populates project.issues
+                if issues_list: # Check if issues_list is not None and not empty
+                    # group.issues is initialized as [] in Group.__init__
+                    group.issues.extend(issues_list)
+
+    # Corrected variable name from 'orgs' to 'group.orgs'
+    print(f"Matching sets of orgs. Total Orgs: {len(group.orgs)}, Total Orgs in Group: {len(group.orgs)}")
     '''
     Policy class has some extensibility designed for it, hence the policy.conditions_group attribute is a 
     ConditionsGroup defined within the Policy class file to access the conditions of the policy.
     '''
     policy_finding_ids = []
-    for org in group.orgs:
-        if org.policies:  # If no policies, skip
-            for policy in org.policies:
-                print(f"{policy.conditions_group.field}: {policy.conditions_group.value}, id: {policy.id}")
-                policy_finding_ids.append(policy.conditions_group.value)
+    if group.orgs: # Ensure group.orgs is not empty before iterating
+        for org in group.orgs:
+            # org.policies is populated by org.get_policies(). It might be None if get_policies was not called or failed.
+            # It's safer to call get_policies() if we expect policies here, or check if org.policies is populated.
+            # For now, assuming if org.policies exists, it's iterable.
+            if org.policies: 
+                for policy in org.policies:
+                    if policy.conditions_group and policy.conditions_group.value: # Check if value exists
+                        print(f"{policy.conditions_group.field}: {policy.conditions_group.value}, id: {policy.id}")
+                        policy_finding_ids.append(policy.conditions_group.value)
     print(f"Policies found with finding ids: {len(policy_finding_ids)}")
     '''
     Example showing how to get issues based on parameters provided. See the following link for all supported parameters:
     https://apidocs.snyk.io/#get-/groups/-group_id-/issues
     '''
 
+    # This will overwrite group.issues collected from projects earlier.
+    # If the intent is to add to them, the logic should be different.
+    # For now, assume overwrite is fine as per original script.
     group.issues = group.get_issues(
         params=dict(
             type="code",
@@ -64,10 +83,11 @@ def main():
         ))
 
     issue_finding_ids = []
-    for issue in group.issues:
-        if hasattr(issue, 'key_asset') and issue.key_asset is not None:
-            issue_finding_ids.append(issue.key_asset)
-            print(f"key_asset: {issue.key_asset}, id: {issue.id}")
+    if group.issues: # Check if group.issues is not None and not empty
+        for issue in group.issues:
+            if hasattr(issue, 'key_asset') and issue.key_asset is not None:
+                issue_finding_ids.append(issue.key_asset)
+                print(f"key_asset: {issue.key_asset}, id: {issue.id}")
 
     print(f"Issues with key_asset: {len(issue_finding_ids)}")
 
@@ -119,15 +139,18 @@ def main():
     Returned objects also have a raw attribute which contains the raw JSON data returned from the API. This is useful 
     for debugging and understanding the data schema returned.
     '''
-    import json
-    print(json.dumps(assets[0].raw, indent=4))
+    # import json # Redundant
+    if assets and len(assets) > 0: # Check if assets list is not empty
+        print(json.dumps(assets[0].raw, indent=4))
+    else:
+        print("No assets found matching the query for 'juice-shop'.")
     '''
     Nice new extension to the Assets API allows the user a quick way to get the projects (from which Issue objects can
     be created) as well as which Organizations an Asset receives project data from. These related entities must
     be called explicitly and are not returned by default. This is because the API can return a large number of items
     and we want to avoid overwhelming the user with data.
     '''
-    if len(assets) > 0:
+    if assets and len(assets) > 0:
         for asset in assets:
             asset.get_projects()
             asset.get_orgs()
@@ -136,8 +159,15 @@ def main():
     Some entities are able to call a singular get_ for the object. For example, the Group object has a get_asset()
     method after being provided an asset_id. This will return a single Asset object that is NOT set in the class.
     '''
-    asset = group.get_asset(assets[0].id)  # get_asset by Asset object's .id
-    asset = group.get_asset('1189c6ce067aa3a5e1896bedaab6614b')  # get_asset by string
+    if assets and len(assets) > 0: # Ensure assets list is not empty before accessing assets[0]
+        asset_by_obj_id = group.get_asset(assets[0].id)  # get_asset by Asset object's .id
+        if asset_by_obj_id:
+            print(f"Fetched asset by object ID: {asset_by_obj_id.name}")
+    
+    asset_by_str_id = group.get_asset('1189c6ce067aa3a5e1896bedaab6614b')  # get_asset by string
+    if asset_by_str_id:
+        print(f"Fetched asset by string ID: {asset_by_str_id.name}")
+
 
     group.api_client.close()
     return

@@ -1,8 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional
 from snyker import CLIWrapper
-import pyaml
-import pygit2
+
 
 
 if TYPE_CHECKING:
@@ -10,8 +9,7 @@ if TYPE_CHECKING:
 import json
 
 if __name__ == "__main__":
-
-
+    
     # Example usage
     snyk_cli = CLIWrapper()  # Instantiate the CLIWrapper class
     snyk_cli.flight_check(minimum_version='1.1295.4')  # Check Snyk CLI presence and version
