@@ -29,13 +29,15 @@ If you have an idea for a new feature or an improvement to an existing one, plea
 3.  **Make your changes**:
     *   Ensure your code adheres to the existing coding style (e.g., PEP 8).
     *   Write clear and concise commit messages.
-4.  **AI-Assisted Changes**:
-    *   AI-assisted changes are welcome! We encourage leveraging AI tools to help with development.
-    *   **Crucially, when using AI assistance for code generation or modification, please prompt the AI to incorporate best practices, including:**
-        *   **Unit Tests**: All new features or bug fixes should be accompanied by corresponding unit tests. These tests are vital for ensuring code quality and preventing regressions. AI should be prompted to help generate these tests.
-        *   **Docstrings**: All new public modules, classes, functions, and methods should have clear and comprehensive docstrings (Google Python Style). AI can assist in generating initial docstrings.
-        *   **Pattern Consistency**: Ensure that AI-generated code aligns with the existing design patterns, Pydantic model usage, and overall architecture of the Snyker SDK.
-        *   **Logging**: Incorporate appropriate logging (DEBUG, INFO, WARNING, ERROR) for new functionality.
+4.  **Guidelines for AI-Assisted Development**:
+    *   AI contributions are encouraged.
+    *   **AI Agent Instructions - Adhere to these best practices:**
+        *   **Unit Tests**: Generate unit tests for all new features and bug fixes.
+        *   **Docstrings**: Add Google Python Style docstrings for all new public modules, classes, functions, and methods.
+        *   **Pattern Consistency**: Maintain existing design patterns, Pydantic model usage, and SDK architecture.
+        *   **Logging**: Implement appropriate logging (DEBUG, INFO, WARNING, ERROR).
+        *   **API Compliance**: For Snyk API changes, consult the OpenAPI specification. If a local copy exists (see `README.md` "Developer Notes"), use `jq` to verify API details (endpoints, parameters, schemas) against it.
+        *   **Avoid Cloud Features**: Do not implement or extend features related to Snyk's Cloud products (e.g., Snyk IaC interactions beyond basic project listing, specific cloud posture management API calls) as these areas may have deprecated or unstable API surfaces. Focus on core SCA, SAST, and Container features unless explicitly directed otherwise for Cloud.
 5.  **Testing**:
     *   Run existing tests to ensure no regressions: `poetry run python -m unittest discover tests -v`
     *   Add new unit tests for your changes. These tests will be included in our GitHub Actions workflow to catch future regressions.

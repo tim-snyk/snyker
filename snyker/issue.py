@@ -173,6 +173,7 @@ class IssueAttributes(BaseModel):
     ignored: bool = Field(default=False)
     key: Optional[str] = None
     status: str
+    type: Optional[str] = None # Added field for issue type (e.g., "license", "vuln", "iac")
     key_asset: Optional[str] = Field(default=None, alias="keyAsset")
     tool: Optional[str] = None
     

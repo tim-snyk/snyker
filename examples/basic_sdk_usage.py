@@ -107,29 +107,39 @@ def main():
             for proj_idx, proj in enumerate(projects):
                 print(f"      Fetching issues for Project {proj_idx+1}/{current_org_projects_fetched}: {shorten_project_name(proj.name)} (ID: {proj.id})...")
                 # Explicitly fetch all issues for the project.
-                issue_params = {}
+                # Requesting open and resolved issues. License and cloud types will be filtered client-side.
+                issue_params = {
+                    'status': 'open,resolved'
+                }
                 print(f"        Fetching issues with params: {issue_params}...")
-                issues: List[IssuePydanticModel] = proj.fetch_issues(params=issue_params)
-                project_issue_count = len(issues)
+                all_issues_for_project: List[IssuePydanticModel] = proj.fetch_issues(params=issue_params)
+                
+                # Client-side filtering to exclude 'license' and 'cloud' types
+                filtered_issues = [
+                    iss for iss in all_issues_for_project 
+                    if iss.attributes and iss.attributes.type not in ["license", "cloud"]
+                ]
+                project_issue_count = len(filtered_issues)
+                
                 total_issues_fetched += project_issue_count
                 org_data["total_issues_in_org"] += project_issue_count
                 
-                first_issue_id_log = f", First issue ID: {issues[0].id}" if issues else ""
-                print(f"        Fetched {project_issue_count} issue(s) for Project '{shorten_project_name(proj.name)}'{first_issue_id_log}.")
+                first_issue_id_log = f", First issue ID: {filtered_issues[0].id}" if filtered_issues else ""
+                print(f"        Fetched {project_issue_count} issue(s) (excluding license/cloud) for Project '{shorten_project_name(proj.name)}'{first_issue_id_log}.")
                 
                 org_data["projects"].append({
                     "name": proj.name, # Store original name for potential full display
                     "display_name": shorten_project_name(proj.name),
                     "id": proj.id,
                     "type": proj.project_type,
-                    "issue_count": project_issue_count
+                    "issue_count": project_issue_count # This count is now non-license, non-cloud
                 })
             fetched_data["organizations"].append(org_data)
         
         print("\n--- Data Fetching Complete ---")
         print(f"Total Organizations Fetched: {total_orgs_fetched}")
         print(f"Total Projects Fetched: {total_projects_fetched}")
-        print(f"Total Issues Fetched (with status filters 'open,resolved,ignored'): {total_issues_fetched}")
+        print(f"Total Issues Fetched (status: 'open,resolved', excluding license & cloud types client-side): {total_issues_fetched}")
 
     except Exception as e:
         print(f"An error occurred during data fetching: {e}")
@@ -156,9 +166,10 @@ def main():
                 is_last_proj = proj_idx == len(org_data["projects"]) - 1
                 proj_branch = f"{org_prefix}  ├─" if not is_last_proj else f"{org_prefix}  └─"
                 
-                print(f"{proj_branch} Project: {proj_data['display_name']} (ID: {proj_data['id']}, Type: {proj_data['type']}, Issues: {proj_data['issue_count']})")
+                # Removed issue_count from this line
+                print(f"{proj_branch} Project: {proj_data['display_name']} (ID: {proj_data['id']}, Type: {proj_data['type']})")
 
-            print(f"{org_prefix}  └─ Total Issues in Org '{org_data['name']}': {org_data['total_issues_in_org']}")
+            # Removed "Total Issues in Org" line
             if is_last_org:
                 print(f"     └─ (End of Org '{org_data['name']}')")
             else:

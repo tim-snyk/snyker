@@ -70,6 +70,32 @@ The script will initialize the `APIClient`, connect to your Snyk Group (it's cur
 
 This should provide a good starting point for understanding how to use the `snyker` SDK.
 
+## Developer Notes: Staying API Compliant
+
+To ensure the SDK and any AI interactions remain compliant with the Snyk API, it's useful to have the OpenAPI specification handy.
+
+1.  **Create a `/tmp` directory** in the root of this project if it doesn't exist:
+    ```bash
+    mkdir -p tmp
+    ```
+2.  **Fetch the API Specification**:
+    You can download the OpenAPI specification for a specific Snyk API version using `curl`. For example, to get the spec for version `2024-10-15` (which is used by some parts of this SDK):
+    ```bash
+    curl -H "Authorization: token $SNYK_TOKEN" "https://api.snyk.io/rest/openapi/2024-10-15" -o tmp/openapi-2024-10-15.json
+    ```
+    Replace `2024-10-15` with the desired API version. You'll need your `SNYK_TOKEN` environment variable to be set.
+
+3.  **Querying the Specification**:
+    The downloaded JSON file can be queried using tools like `jq` to inspect endpoint definitions, parameters, and schemas. For example, to get the definition for the "List Organization Issues" endpoint:
+    ```bash
+    jq '.paths."/orgs/{org_id}/issues".get' tmp/openapi-2024-10-15.json
+    ```
+    Or to see the definition of a specific parameter like `ScanItemId`:
+    ```bash
+    jq '.components.parameters.ScanItemId' tmp/openapi-2024-10-15.json
+    ```
+    When working with an AI to modify or extend the SDK, pointing it to this local copy of the specification and instructing it to use `jq` for verification can help maintain accuracy and compliance with the API contract.
+
 ## Roadmap / Todolist
 
 This section outlines planned features and areas for future development. Contributions are welcome! Please see `CONTRIBUTING.md`.
@@ -93,7 +119,6 @@ This section outlines planned features and areas for future development. Contrib
         -   **License Compliance**: Deeper integration with Snyk's license management features.
         -   **Cloud Security**:
             -   Snyk IaC: More detailed interaction with IaC settings, test results.
-            -   Snyk Cloud: Managing cloud environments, posture checks.
         -   **Container Security**: Detailed management of container image scanning results and settings.
         -   **Targets/Integrations**: More granular control over Snyk Targets and integration settings beyond basic project linking.
         -   **Project Settings**: Programmatic modification of project settings (e.g., test frequency, notifications).
