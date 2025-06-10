@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import concurrent.futures
 import logging
 import json
@@ -10,9 +10,11 @@ import requests # Used directly in testApi, consider refactoring later
 from pydantic import BaseModel, Field, PrivateAttr
 
 from snyker.config import API_CONFIG
+from .api_client import APIClient
+# from .group import GroupPydanticModel # Circular import
+# from .issue import IssuePydanticModel # Moved to TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .api_client import APIClient
     from .group import GroupPydanticModel
     from .organization import OrganizationPydanticModel
     from .issue import IssuePydanticModel
@@ -77,8 +79,8 @@ class ProjectPydanticModel(BaseModel):
     relationships: Optional[ProjectRelationships] = None
 
     _api_client: APIClient = PrivateAttr()
-    _organization: OrganizationPydanticModel = PrivateAttr()
-    _group: Optional[GroupPydanticModel] = PrivateAttr(default=None)
+    _organization: "OrganizationPydanticModel" = PrivateAttr()
+    _group: Optional["GroupPydanticModel"] = PrivateAttr(default=None)
     _logger: logging.Logger = PrivateAttr()
 
     _issues: Optional[List[IssuePydanticModel]] = PrivateAttr(default=None)
@@ -95,8 +97,8 @@ class ProjectPydanticModel(BaseModel):
     def from_api_response(cls,
                           project_data: Dict[str, Any],
                           api_client: APIClient,
-                          organization: OrganizationPydanticModel,
-                          group: Optional[GroupPydanticModel] = None,
+                          organization: "OrganizationPydanticModel",
+                          group: Optional["GroupPydanticModel"] = None,
                           fetch_full_details_if_summary: bool = False
                           ) -> ProjectPydanticModel:
         """Creates a ProjectPydanticModel instance from API response data.
@@ -284,6 +286,10 @@ class ProjectPydanticModel(BaseModel):
         self._logger.debug(f"[Project ID: {self.id}] Fetching issues...")
         if self._issues is not None:
             return self._issues
+        
+        # Local import to avoid NameError due to TYPE_CHECKING for OrganizationPydanticModel
+        # and its methods which might return/use IssuePydanticModel
+        from .issue import IssuePydanticModel
 
         project_specific_filters = {
             'scan_item.id': self.id,
@@ -477,3 +483,5 @@ class ProjectPydanticModel(BaseModel):
             self._logger.error(f"Unexpected error in get_ignores_v1 for project {self.id}: {e}", exc_info=True)
             
         return ignores
+
+ProjectPydanticModel.update_forward_refs()

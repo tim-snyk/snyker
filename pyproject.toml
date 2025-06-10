@@ -47,8 +47,8 @@ base_url = "https://api.snyk.io"
 max_retries = 15
 backoff_factor = 0.5
 status_forcelist = [429, 500, 502, 503, 504] # HTTP status codes that trigger a retry
-logging_level = "DEBUG" # Changed to DEBUG
+logging_level = "INFO" # Changed to DEBUG
 default_rate_limit_retry_after = 5.0 # Default seconds to wait if 429 response has no Retry-After header
 
 [tool.snyker.sdk_settings]
-loading_strategy = "lazy" # Options: "lazy", "eager". Determines default data fetching behavior.
+loading_strategy = "eager" # Options: "lazy", "eager". Determines default data fetching behavior.

@@ -158,3 +158,58 @@ This section outlines planned features and areas for future development. Contrib
 -   **Tutorials**: Create step-by-step tutorials for common use cases.
 
 We aim to make Snyker a powerful and easy-to-use SDK for interacting with the Snyk platform. Your contributions can help make that a reality!
+
+### Running `main.py`
+
+The `main.py` script can be executed directly from the project root using Poetry:
+
+```bash
+poetry run python main.py
+```
+
+### Running Tests
+
+This project uses `pytest` for its test suite. To run the tests, first ensure `pytest` is installed as a development dependency, then execute:
+
+```bash
+poetry run pytest
+poetry run pytest --log-cli-level=DEBUG #  To provide relay logs to see what's going on.
+
+### Troubleshooting `ModuleNotFoundError: No module named 'snyker'`
+
+If you encounter a `ModuleNotFoundError: No module named 'snyker'` when running tests or scripts, it means Python cannot find the `snyker` package. While `poetry install --sync` should typically resolve this by installing the project in editable mode, you can try the following:
+
+1.  **Verify `snyker` is installed in editable mode**:
+    Open your terminal (outside of Cline) and navigate to your project root (`/Users/timgowan/git/snyker`). Then run:
+    ```bash
+    poetry run pip list -e
+    ```
+    You should see `snyker` listed, indicating its path. If it's not there, `poetry install --sync` might not have completed successfully, or there's an issue with your Poetry setup.
+
+2.  **Manually test import within Poetry environment**:
+    From your project root in a separate terminal, launch a Python interpreter within the Poetry environment and try to import `snyker`:
+    ```bash
+    poetry run python
+    >>> import snyker
+    >>> print(snyker.__file__) # This should show the path to snyker/__init__.py
+    >>> exit()
+    ```
+    If `import snyker` still fails here, it confirms the package is not discoverable even within the activated Poetry environment. If it succeeds, then the issue might be specific to how `pytest` is being invoked or its internal environment.
+
+3.  **Inspect `sys.path` within the Poetry environment**:
+    Still within the `poetry run python` interpreter:
+    ```bash
+    poetry run python
+    >>> import sys
+    >>> for p in sys.path:
+    ...     print(p)
+    >>> exit()
+    ```
+    Look for your project's root directory (`/Users/timgowan/git/snyker`) or the `snyker/` directory itself in the printed paths. If it's missing, that's the problem.
+
+If these steps don't resolve the issue, you might need to manually add your project's root directory to the `PYTHONPATH` environment variable before running `pytest` or other scripts. For example:
+```bash
+export PYTHONPATH=/Users/timgowan/git/snyker:$PYTHONPATH
+poetry run pytest
+```
+```

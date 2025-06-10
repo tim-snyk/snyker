@@ -1,14 +1,15 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any, Tuple, TYPE_CHECKING
 from datetime import datetime
 import logging
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
 
 from snyker.utils import datetime_converter
+from .api_client import APIClient
+# from .organization import OrganizationPydanticModel # Moved to TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .api_client import APIClient
     from .organization import OrganizationPydanticModel
 
 

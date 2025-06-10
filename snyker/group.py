@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, TYPE_CHECKING
 import concurrent.futures
 import logging
 import json
@@ -7,13 +7,13 @@ import json
 from pydantic import BaseModel, Field, PrivateAttr
 
 from snyker.config import API_CONFIG # For loading_strategy
+from .api_client import APIClient
+# from .organization import OrganizationPydanticModel # Circular import
+from .asset import Asset
+from .issue import IssuePydanticModel
 
 if TYPE_CHECKING:
-    from .api_client import APIClient
-    # Use forward references for models that will be refactored
     from .organization import OrganizationPydanticModel
-    from .asset import Asset
-    from .issue import IssuePydanticModel
 
 API_VERSION_GROUP = "2024-10-15"
 
@@ -39,7 +39,7 @@ class GroupPydanticModel(BaseModel):
     _api_client: APIClient = PrivateAttr()
     _logger: logging.Logger = PrivateAttr()
 
-    _organizations: Optional[List[OrganizationPydanticModel]] = PrivateAttr(default=None)
+    _organizations: Optional[List["OrganizationPydanticModel"]] = PrivateAttr(default=None)
     _assets: Optional[List[Asset]] = PrivateAttr(default=None)
     _issues: Optional[List[IssuePydanticModel]] = PrivateAttr(default=None)
     
@@ -187,7 +187,7 @@ class GroupPydanticModel(BaseModel):
         if self._organizations is not None:
             return self._organizations
 
-        from .organization import OrganizationPydanticModel
+        from .organization import OrganizationPydanticModel # Local import
 
         _params = params if params is not None else {}
         uri = f"/rest/groups/{self.id}/orgs"
@@ -249,7 +249,7 @@ class GroupPydanticModel(BaseModel):
         if self._issues is not None and not params:
             return self._issues
 
-        from .issue import IssuePydanticModel
+        from .issue import IssuePydanticModel # Local import
 
         _params = params if params is not None else {}
         uri = f"/rest/groups/{self.id}/issues"
@@ -306,10 +306,9 @@ class GroupPydanticModel(BaseModel):
             An `Asset` instance if found, otherwise `None`.
         """
         self._logger.debug(f"[Group ID: {self.id}] Fetching specific asset by ID: {asset_id}...")
-        from .asset import Asset
-
         _params = params if params is not None else {}
         uri = f"/closed-beta/groups/{self.id}/assets/{asset_id}"
+        from .asset import Asset # Local import
         headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
         request_api_params = {'version': API_VERSION_GROUP}
         request_api_params.update(_params)
@@ -340,10 +339,9 @@ class GroupPydanticModel(BaseModel):
             ValueError: If the `query` parameter is not provided.
         """
         self._logger.debug(f"[Group ID: {self.id}] Fetching assets by query: {json.dumps(query)}...")
-        from .asset import Asset
-
         _params = params if params is not None else {}
         uri = f"/closed-beta/groups/{self.id}/assets/search"
+        from .asset import Asset # Local import
         headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
         request_api_params = {'version': API_VERSION_GROUP, 'limit': 100}
         request_api_params.update(_params)
@@ -413,7 +411,7 @@ class GroupPydanticModel(BaseModel):
                     return org
         
         self._logger.debug(f"[Group ID: {self.id}] Organization {org_id} not in cache, fetching directly.")
-        from .organization import OrganizationPydanticModel
+        from .organization import OrganizationPydanticModel # Local import
         try:
             uri = f"/rest/orgs/{org_id}"
             headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
@@ -431,3 +429,5 @@ class GroupPydanticModel(BaseModel):
         except Exception as e:
             self._logger.error(f"[Group ID: {self.id}] Error fetching organization {org_id}: {e}", exc_info=True)
             return None
+
+GroupPydanticModel.update_forward_refs()

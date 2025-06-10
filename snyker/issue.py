@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, TYPE_CHECKING
 import logging
 import json # For potential debugging, though Pydantic handles serialization
 
@@ -7,11 +7,13 @@ from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_valid
 
 from snyker.utils import datetime_converter
 from snyker.config import API_CONFIG
+from .api_client import APIClient
+# from .organization import OrganizationPydanticModel # Circular import
+from .project import ProjectPydanticModel
+# from .group import GroupPydanticModel # Moved to TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .api_client import APIClient
     from .organization import OrganizationPydanticModel
-    from .project import ProjectPydanticModel
     from .group import GroupPydanticModel
 
 
@@ -306,6 +308,10 @@ class IssuePydanticModel(BaseModel):
         """
         if self._project:
             return
+
+        # Local imports to resolve names at runtime
+        from .organization import OrganizationPydanticModel
+        from .group import GroupPydanticModel
 
         project_id: Optional[str] = None
         org_for_project_fetch: Optional[OrganizationPydanticModel] = self._organization

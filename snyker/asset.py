@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any, Tuple, TYPE_CHECKING
 
 from pydantic import BaseModel, Field, PrivateAttr
 from urllib.parse import urlparse
@@ -7,13 +7,13 @@ import concurrent.futures
 import logging
 
 from snyker.config import API_CONFIG # For loading_strategy
+from .api_client import APIClient
+# from .group import GroupPydanticModel # Circular import
+from .organization import OrganizationPydanticModel
+from .project import ProjectPydanticModel
 
 if TYPE_CHECKING:
-    from .api_client import APIClient
-    # Use forward references for models that will be refactored
     from .group import GroupPydanticModel
-    from .organization import OrganizationPydanticModel
-    from .project import ProjectPydanticModel
 
 API_VERSION_ASSET = "2024-10-15"
 
@@ -188,11 +188,10 @@ class Asset(BaseModel):
             A list of OrganizationPydanticModel instances.
         """
         self._logger.debug(f"[Asset ID: {self.id}] Instantiating organizations from asset attributes...")
+        from .organization import OrganizationPydanticModel # Local import
         
         if self._organizations is not None:
             return self._organizations
-
-        from .organization import OrganizationPydanticModel
 
         instantiated_organizations: List[OrganizationPydanticModel] = []
         
@@ -248,13 +247,11 @@ class Asset(BaseModel):
             A list of ProjectPydanticModel instances.
         """
         self._logger.debug(f"[Asset ID: {self.id}] Fetching projects via relationship link...")
+        from .project import ProjectPydanticModel # Local import
         _params = params if params is not None else {}
         
         if self._projects is not None:
             return self._projects
-
-        from .project import ProjectPydanticModel
-        from .organization import OrganizationPydanticModel
 
 
         if 'snyk' not in self.attributes.sources:
