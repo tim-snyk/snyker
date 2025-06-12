@@ -68,14 +68,20 @@ def main():
         logger.info(f"Fetched {len(package_vulnerabilities)} package vulnerabilities. Analyzing for CVEs...")
 
         for issue in package_vulnerabilities:
-            has_cve = False
+            has_cve_identifier = False # Renamed for clarity and to avoid conflict if 'has_cve' is used elsewhere
+            # Check the problems array first
             if issue.attributes and issue.attributes.problems:
                 for problem in issue.attributes.problems:
                     if problem.source and problem.source.upper() == "CVE":
-                        has_cve = True
-                        break # Found a CVE, no need to check other problems for this issue
+                        has_cve_identifier = True
+                        break # Found a CVE in problems, no need to check further for this issue
             
-            if not has_cve:
+            # If no CVE found in problems, then check the issue title
+            if not has_cve_identifier and issue.attributes and issue.attributes.title:
+                if "CVE-" in issue.attributes.title.upper(): # Case-insensitive check in title
+                    has_cve_identifier = True
+            
+            if not has_cve_identifier:
                 vulnerabilities_without_cve.append(issue)
 
         if vulnerabilities_without_cve:
