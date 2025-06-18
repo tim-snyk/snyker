@@ -240,7 +240,8 @@ class OrganizationPydanticModel(BaseModel):
         _params = params if params is not None else {}
         uri = f"/rest/orgs/{self.id}/projects"
         headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
-        current_api_params = {'version': API_VERSION_ORG, 'limit': 100}
+        # APIClient.paginate will now apply the default page limit if 'limit' is not in _params.
+        current_api_params = {'version': API_VERSION_ORG}
         current_api_params.update(_params)
 
         project_data_items: List[Dict[str, Any]] = []
@@ -310,7 +311,8 @@ class OrganizationPydanticModel(BaseModel):
         _params = params if params is not None else {}
         uri = f"/rest/orgs/{self.id}/policies"
         headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
-        current_api_params = {'version': API_VERSION_ORG, 'limit': 100}
+        # APIClient.paginate will now apply the default page limit if 'limit' is not in _params.
+        current_api_params = {'version': API_VERSION_ORG}
         current_api_params.update(_params)
 
         policy_data_items: List[Dict[str, Any]] = []

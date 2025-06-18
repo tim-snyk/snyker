@@ -13,6 +13,7 @@ DEFAULT_API_CLIENT_CONFIG = {
     "logging_level": "INFO",
     "max_workers": None,  # If None, will be calculated as min(32, os.cpu_count() + 4)
     "default_rate_limit_retry_after": 5.0,
+    "default_page_limit": 100, # Default items per page for API calls
     "loading_strategy": "eager" # Options: "lazy", "eager" -> Changed to eager
 }
 
@@ -52,6 +53,7 @@ def load_api_client_config() -> Dict[str, Any]:
                 config["logging_level"] = api_client_settings.get("logging_level", config["logging_level"])
                 config["max_workers"] = api_client_settings.get("max_workers", config["max_workers"])
                 config["default_rate_limit_retry_after"] = api_client_settings.get("default_rate_limit_retry_after", config["default_rate_limit_retry_after"])
+                config["default_page_limit"] = api_client_settings.get("default_page_limit", config["default_page_limit"])
 
             sdk_settings = tool_snyker_config.get("sdk_settings", {})
             if sdk_settings:

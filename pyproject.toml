@@ -14,7 +14,6 @@ license = "Apache-2.0"
 requires-python = ">=3.11"
 classifiers = [
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -49,6 +48,7 @@ backoff_factor = 0.5
 status_forcelist = [429, 500, 502, 503, 504] # HTTP status codes that trigger a retry
 logging_level = "INFO" # Changed to DEBUG
 default_rate_limit_retry_after = 5.0 # Default seconds to wait if 429 response has no Retry-After header
+default_page_limit = 100 # Default number of items to request per page for paginated API calls
 
 [tool.snyker.sdk_settings]
-loading_strategy = "eager" # Options: "lazy", "eager". Determines default data fetching behavior.
+loading_strategy = "lazy" # Options: "lazy", "eager". Determines default data fetching behavior.

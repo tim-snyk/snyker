@@ -70,6 +70,26 @@ The script will initialize the `APIClient`, connect to your Snyk Group (it's cur
 
 This should provide a good starting point for understanding how to use the `snyker` SDK.
 
+## SDK Configuration
+
+Beyond environment variables like `SNYK_TOKEN` and `SNYK_API`, the `snyker` SDK allows for more detailed configuration via the `pyproject.toml` file in the root of the project. These settings are typically found under the `[tool.snyker.api_client]` and `[tool.snyker.sdk_settings]` sections.
+
+Key configurable options include:
+
+*   **`[tool.snyker.api_client]`**:
+    *   `base_url`: The base URL for the Snyk API (can also be set by `SNYK_API` env var, which takes precedence).
+    *   `max_retries`: Maximum number of retries for failed API requests.
+    *   `backoff_factor`: Factor by which to increase delay between retries.
+    *   `status_forcelist`: List of HTTP status codes that trigger a retry.
+    *   `logging_level`: Default logging level for the SDK (e.g., "INFO", "DEBUG").
+    *   `default_rate_limit_retry_after`: Default seconds to wait if a 429 rate limit response has no `Retry-After` header.
+    *   `default_page_limit`: (New) Default number of items to request per page for paginated API calls (e.g., listing projects). Defaults to 100 if not specified. This helps manage the size of responses from the Snyk API for each page request.
+
+*   **`[tool.snyker.sdk_settings]`**:
+    *   `loading_strategy`: Determines default data fetching behavior for related entities (e.g., "lazy" or "eager").
+
+To customize these, edit the `pyproject.toml` file. The SDK will load these settings on initialization. See `snyker/config.py` for default values and how configurations are loaded.
+
 ## Developer Notes: Staying API Compliant
 
 To ensure the SDK and any AI interactions remain compliant with the Snyk API, it's useful to have the OpenAPI specification handy.
@@ -174,6 +194,7 @@ This project uses `pytest` for its test suite. To run the tests, first ensure `p
 ```bash
 poetry run pytest
 poetry run pytest --log-cli-level=DEBUG #  To provide relay logs to see what's going on.
+poetry run python -m unittest discover tests -v
 
 ### Troubleshooting `ModuleNotFoundError: No module named 'snyker'`
 

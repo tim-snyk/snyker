@@ -320,6 +320,9 @@ class APIClient:
             endpoint (str): The initial API endpoint path (e.g., '/rest/orgs') or a
                             full URL for the first page.
             params (Optional[Dict[str, Any]]): Query parameters for the initial request.
+                If `params` does not include a 'limit' key, the default page limit
+                from `API_CONFIG['default_page_limit']` (typically 100) will be used
+                for API calls. An explicit 'limit' in `params` will override this default.
             pagination_key (str): The key within the 'links' object of the response
                                   JSON that contains the URL for the next page.
                                   Defaults to 'next'.
@@ -342,6 +345,10 @@ class APIClient:
         """
         current_params = params.copy() if params else {}
         page_count = 0
+
+        # Ensure a 'limit' is set for the API per-page request, using config default if not provided.
+        if 'limit' not in current_params:
+            current_params['limit'] = API_CONFIG.get("default_page_limit", 100) # Default to 100 if not in config
         
         # Determine if the initial endpoint is a full URL or a relative path
         if endpoint.startswith(self.base_url) or endpoint.startswith("http://") or endpoint.startswith("https://"):
