@@ -234,29 +234,55 @@ class OrganizationPydanticModel(BaseModel):
     def fetch_projects(self, params: Optional[Dict[str, Any]] = None) -> List[ProjectPydanticModel]:
         self._logger.debug(f"[Org ID: {self.id}] Fetching projects...")
         from .project import ProjectPydanticModel # Local import
-        if self._projects is not None:
+        if self._projects is not None and not params:
             return self._projects
 
-        # Actual fetching logic would go here. For now, returning empty list.
-        # This method needs to be fully implemented.
-        project_data_items: List[Dict[str, Any]] = [] # Placeholder
-        
-        # Example of how projects might be instantiated if data were fetched:
-        # project_futures = []
-        # for project_data in project_data_items:
-        #     future = self._api_client.submit_task(
-        #         ProjectPydanticModel.from_api_response,
-        #         project_data,
-        #         self._api_client,
-        #         self,
-        #         self._group 
-        #     )
-        #     project_futures.append(future)
-        # ... (rest of instantiation logic) ...
-        
-        self._projects = [] # Placeholder
-        self._logger.info(f"[Org ID: {self.id}] Fetched and instantiated {len(self._projects)} projects.")
-        return self._projects
+        _params = params if params is not None else {}
+        uri = f"/rest/orgs/{self.id}/projects"
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+        current_api_params = {'version': API_VERSION_ORG, 'limit': 100}
+        current_api_params.update(_params)
+
+        project_data_items: List[Dict[str, Any]] = []
+        try:
+            for project_data_item in self._api_client.paginate(
+                endpoint=uri, params=current_api_params, headers=headers, data_key='data'):
+                project_data_items.append(project_data_item)
+        except Exception as e_paginate:
+            self._logger.error(f"[Org ID: {self.id}] Error paginating projects: {e_paginate}", exc_info=True)
+            if not params: self._projects = []
+            return []
+
+        if not project_data_items:
+            self._logger.info(f"[Org ID: {self.id}] No projects found for this organization with params: {json.dumps(_params)}.")
+            if not params: self._projects = []
+            return []
+
+        project_futures = []
+        for project_data in project_data_items:
+            future = self._api_client.submit_task(
+                ProjectPydanticModel.from_api_response,
+                project_data,
+                self._api_client,
+                self,
+                self._group
+            )
+            project_futures.append(future)
+
+        project_results: List[ProjectPydanticModel] = []
+        for future in concurrent.futures.as_completed(project_futures):
+            try:
+                project_instance = future.result()
+                if project_instance:
+                    project_results.append(project_instance)
+            except Exception as e_future:
+                self._logger.error(f"[Org ID: {self.id}] Error instantiating Project model: {e_future}", exc_info=True)
+
+        if not params:
+            self._projects = project_results
+
+        self._logger.info(f"[Org ID: {self.id}] Fetched and instantiated {len(project_results)} projects with params: {json.dumps(_params)}.")
+        return project_results
 
     def fetch_issues(self, params: Optional[Dict[str, Any]] = None) -> List[IssuePydanticModel]:
         self._logger.debug(f"[Org ID: {self.id}] Fetching issues...")
@@ -276,11 +302,56 @@ class OrganizationPydanticModel(BaseModel):
         if self._policies is not None:
             return self._policies
         
-        # Actual fetching logic would go here. For now, returning empty list.
-        # This method needs to be fully implemented.
-        self._policies = [] # Placeholder
-        self._logger.info(f"[Org ID: {self.id}] Fetched and instantiated {len(self._policies)} policies.")
-        return self._policies
+        self._logger.debug(f"[Org ID: {self.id}] Fetching policies...")
+        from .policy import PolicyPydanticModel # Local import
+        if self._policies is not None and not params: # If params are provided, always refetch
+            return self._policies
+
+        _params = params if params is not None else {}
+        uri = f"/rest/orgs/{self.id}/policies"
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+        current_api_params = {'version': API_VERSION_ORG, 'limit': 100}
+        current_api_params.update(_params)
+
+        policy_data_items: List[Dict[str, Any]] = []
+        try:
+            for policy_data_item in self._api_client.paginate(
+                endpoint=uri, params=current_api_params, headers=headers, data_key='data'):
+                policy_data_items.append(policy_data_item)
+        except Exception as e_paginate:
+            self._logger.error(f"[Org ID: {self.id}] Error paginating policies: {e_paginate}", exc_info=True)
+            if not params: self._policies = [] # Cache empty list if it was a general fetch
+            return [] # Return empty list on error
+
+        if not policy_data_items:
+            self._logger.info(f"[Org ID: {self.id}] No policies found for this organization with params: {json.dumps(_params)}.")
+            if not params: self._policies = []
+            return []
+
+        policy_futures = []
+        for policy_data in policy_data_items:
+            future = self._api_client.submit_task(
+                PolicyPydanticModel.from_api_response,
+                policy_data,
+                self._api_client,
+                self # Pass the organization instance
+            )
+            policy_futures.append(future)
+
+        policy_results: List[PolicyPydanticModel] = []
+        for future in concurrent.futures.as_completed(policy_futures):
+            try:
+                policy_instance = future.result()
+                if policy_instance:
+                    policy_results.append(policy_instance)
+            except Exception as e_future:
+                self._logger.error(f"[Org ID: {self.id}] Error instantiating Policy model: {e_future}", exc_info=True)
+        
+        if not params: # Only cache if it's a general fetch without specific params
+            self._policies = policy_results
+        
+        self._logger.info(f"[Org ID: {self.id}] Fetched and instantiated {len(policy_results)} policies with params: {json.dumps(_params)}.")
+        return policy_results
 
     def fetch_integrations(self, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         self._logger.debug(f"[Org ID: {self.id}] Fetching integrations (v1 API)...")

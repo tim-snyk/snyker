@@ -193,7 +193,7 @@ description = "Cross-platform colored terminal text."
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
 groups = ["dev"]
-markers = "platform_system == \"Windows\" or sys_platform == \"win32\""
+markers = "platform_system == \"Windows\""
 files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
@@ -230,18 +230,6 @@ files = [
 
 [package.extras]
 all = ["flake8 (>=7.1.1)", "mypy (>=1.11.2)", "pytest (>=8.3.2)", "ruff (>=0.6.2)"]
-
-[[package]]
-name = "iniconfig"
-version = "2.1.0"
-description = "brain-dead simple config-ini parsing"
-optional = false
-python-versions = ">=3.8"
-groups = ["dev"]
-files = [
-    {file = "iniconfig-2.1.0-py3-none-any.whl", hash = "sha256:9deba5723312380e77435581c6bf4935c94cbfab9b1ed33ef8d238ea168eb760"},
-    {file = "iniconfig-2.1.0.tar.gz", hash = "sha256:3abbd2e30b36733fee78f9c7f7308f2d0050e88f0087fd25c2645f63c773e1c7"},
-]
 
 [[package]]
 name = "mccabe"
@@ -307,22 +295,6 @@ files = [
 docs = ["furo (>=2024.8.6)", "proselint (>=0.14)", "sphinx (>=8.1.3)", "sphinx-autodoc-typehints (>=3)"]
 test = ["appdirs (==1.4.4)", "covdefaults (>=2.3)", "pytest (>=8.3.4)", "pytest-cov (>=6)", "pytest-mock (>=3.14)"]
 type = ["mypy (>=1.14.1)"]
-
-[[package]]
-name = "pluggy"
-version = "1.6.0"
-description = "plugin and hook calling mechanisms for python"
-optional = false
-python-versions = ">=3.9"
-groups = ["dev"]
-files = [
-    {file = "pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746"},
-    {file = "pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3"},
-]
-
-[package.extras]
-dev = ["pre-commit", "tox"]
-testing = ["coverage", "pytest", "pytest-benchmark"]
 
 [[package]]
 name = "pycodestyle"
@@ -483,27 +455,6 @@ files = [
 ]
 
 [[package]]
-name = "pytest"
-version = "8.3.5"
-description = "pytest: simple powerful testing with Python"
-optional = false
-python-versions = ">=3.8"
-groups = ["dev"]
-files = [
-    {file = "pytest-8.3.5-py3-none-any.whl", hash = "sha256:c69214aa47deac29fad6c2a4f590b9c4a9fdb16a403176fe154b79c0b4d4d820"},
-    {file = "pytest-8.3.5.tar.gz", hash = "sha256:f4efe70cc14e511565ac476b57c279e12a855b11f48f212af1080ef2263d3845"},
-]
-
-[package.dependencies]
-colorama = {version = "*", markers = "sys_platform == \"win32\""}
-iniconfig = "*"
-packaging = "*"
-pluggy = ">=1.5,<2"
-
-[package.extras]
-dev = ["argcomplete", "attrs (>=19.2)", "hypothesis (>=3.56)", "mock", "pygments (>=2.7.2)", "requests", "setuptools", "xmlschema"]
-
-[[package]]
 name = "requests"
 version = "2.32.3"
 description = "Python HTTP for Humans."
@@ -573,4 +524,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11"
-content-hash = "692fe8cb9b7dc29381d7e532756d68d99bc6e3d56bb47139d2df0f9343bf4251"
+content-hash = "63866c5382b342f0a3be5e51e050343c919582002a1f75d5c664d8de1770e7df"

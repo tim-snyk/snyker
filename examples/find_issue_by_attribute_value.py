@@ -92,7 +92,7 @@ def main():
         api_client.close()
         return
 
-    found_issue_details: Optional[Tuple[IssuePydanticModel, str]] = None
+    found_issues_list: List[Tuple[IssuePydanticModel, str]] = [] # Changed to a list
 
     try:
         logger.info(f"Fetching all issues for Group '{group.name}' to search for value '{search_value}'...")
@@ -109,24 +109,23 @@ def main():
             path_to_value = recursive_find_value_path(issue_dict, search_value)
             
             if path_to_value:
-                found_issue_details = (issue, path_to_value)
-                break # Stop after finding the first matching issue
+                found_issues_list.append((issue, path_to_value))
+                # Removed break to find all occurrences
 
-        if found_issue_details:
-            issue_obj, path = found_issue_details
-            print("\n--- Issue Found ---")
-            print(f"Search Value: \"{search_value}\"")
-            print(f"Issue ID: {issue_obj.id}")
-            print(f"Issue Title: \"{issue_obj.title}\"")
-            print(f"Issue Type: {issue_obj.attributes.type if issue_obj.attributes else 'N/A'}")
-            print(f"Path to value: {path}")
-            
-            project_info = "N/A"
-            if issue_obj.relationships and issue_obj.relationships.scan_item and issue_obj.relationships.scan_item.id:
-                project_info = f"ID: {issue_obj.relationships.scan_item.id}, Type: {issue_obj.relationships.scan_item.type}"
-            print(f"Associated Scan Item: {project_info}")
-
-            logger.info(f"Found value '{search_value}' in Issue ID {issue_obj.id} at path '{path}'.")
+        if found_issues_list:
+            print(f"\n--- Found {len(found_issues_list)} Issue(s) Containing Value: \"{search_value}\" ---")
+            for idx, (issue_obj, path) in enumerate(found_issues_list):
+                print(f"\nMatch {idx + 1}:")
+                print(f"  Issue ID: {issue_obj.id}")
+                print(f"  Issue Title: \"{issue_obj.title}\"")
+                print(f"  Issue Type: {issue_obj.attributes.type if issue_obj.attributes else 'N/A'}")
+                print(f"  Path to value: {path}")
+                
+                project_info = "N/A"
+                if issue_obj.relationships and issue_obj.relationships.scan_item and issue_obj.relationships.scan_item.id:
+                    project_info = f"ID: {issue_obj.relationships.scan_item.id}, Type: {issue_obj.relationships.scan_item.type}"
+                print(f"  Associated Scan Item: {project_info}")
+                logger.info(f"Match {idx + 1}: Found value '{search_value}' in Issue ID {issue_obj.id} at path '{path}'.")
         else:
             print(f"\nValue \"{search_value}\" not found in any issue within Group '{group.name}'.")
             logger.info(f"Value \"{search_value}\" not found in any of the {len(all_issues)} issues checked.")

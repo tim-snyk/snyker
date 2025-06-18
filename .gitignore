@@ -1,4 +1,4 @@
-# macOS specific
+
 .DS_Store
 
 # IDE configuration
@@ -174,3 +174,5 @@ private/
 # poetry.lock and uv.lock are typically committed, so not listed here.
 # .python-version is typically committed.
 >>>>>>> a25d202 (feat: Update SDK docs, .gitignore, add GH Actions & CONTRIBUTING.md, enhance example script)
+
+*.csv

@@ -39,6 +39,7 @@ class ProjectAttributes(BaseModel):
     status: Optional[str] = None
     target_reference: Optional[str] = None
     target_file: Optional[str] = None
+    test_surface: Optional[str] = None
     created: Optional[str] = None
     read_only: Optional[bool] = None
     test_frequency: Optional[str] = None
@@ -177,6 +178,11 @@ class ProjectPydanticModel(BaseModel):
     def target_reference(self) -> Optional[str]:
         """The target reference, such as a branch name for SCM projects."""
         return self.attributes.target_reference
+
+    @property
+    def test_surface(self) -> Optional[str]:
+        """The test surface of the project."""
+        return self.attributes.test_surface
     
     @property
     def target_id(self) -> Optional[str]:
