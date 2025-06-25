@@ -11,6 +11,7 @@ from .api_client import APIClient
 # from .project import ProjectPydanticModel # Circular import
 from .issue import IssuePydanticModel
 from .policy import PolicyPydanticModel
+from .purl import PackageURL
 
 if TYPE_CHECKING:
     from .project import ProjectPydanticModel
@@ -291,11 +292,52 @@ class OrganizationPydanticModel(BaseModel):
         if self._issues is not None and not params: # If params are provided, always refetch
             return self._issues
 
-        # Actual fetching logic would go here. For now, returning empty list.
-        # This method needs to be fully implemented.
-        self._issues = [] # Placeholder
-        self._logger.info(f"[Org ID: {self.id}] Fetched and instantiated {len(self._issues)} issues.")
-        return self._issues
+        _params = params if params is not None else {}
+        uri = f"/rest/orgs/{self.id}/issues"
+        headers = {'Content-Type': 'application/json', 'Authorization': f'token {self._api_client.token}'}
+        current_api_params = {'version': API_VERSION_ORG, 'limit': 100}
+        current_api_params.update(_params)
+
+        issue_data_items: List[Dict[str, Any]] = []
+        try:
+            for issue_data_item in self._api_client.paginate(
+                endpoint=uri, params=current_api_params, headers=headers, data_key='data'):
+                issue_data_items.append(issue_data_item)
+        except Exception as e_paginate:
+            self._logger.error(f"[Org ID: {self.id}] Error paginating issues: {e_paginate}", exc_info=True)
+            if not params: self._issues = []
+            return []
+
+        if not issue_data_items:
+            self._logger.info(f"[Org ID: {self.id}] No issues found for this organization with params: {json.dumps(_params)}.")
+            if not params: self._issues = []
+            return []
+
+        issue_futures = []
+        for issue_data in issue_data_items:
+            future = self._api_client.submit_task(
+                IssuePydanticModel.from_api_response,
+                issue_data,
+                self._api_client,
+                organization=self,
+                group=self._group
+            )
+            issue_futures.append(future)
+
+        issue_results: List[IssuePydanticModel] = []
+        for future in concurrent.futures.as_completed(issue_futures):
+            try:
+                issue_instance = future.result()
+                if issue_instance:
+                    issue_results.append(issue_instance)
+            except Exception as e_future:
+                self._logger.error(f"[Org ID: {self.id}] Error instantiating Issue model: {e_future}", exc_info=True)
+        
+        if not params: # Only cache if it's a general fetch without specific params
+            self._issues = issue_results
+        
+        self._logger.info(f"[Org ID: {self.id}] Fetched and instantiated {len(issue_results)} issues with params: {json.dumps(_params)}.")
+        return issue_results
 
     def fetch_policies(self, params: Optional[Dict[str, Any]] = None) -> List[PolicyPydanticModel]:
         self._logger.debug(f"[Org ID: {self.id}] Fetching policies...")
@@ -365,5 +407,77 @@ class OrganizationPydanticModel(BaseModel):
         self._integrations = [] # Placeholder
         self._logger.info(f"[Org ID: {self.id}] Fetched {len(self._integrations)} integrations.")
         return self._integrations
+
+    def fetch_issues_for_purl(
+        self, purl: "PackageURL", params: Optional[Dict[str, Any]] = None
+    ) -> List[IssuePydanticModel]:
+        """Fetches issues for a specific package version identified by a PURL.
+
+        Args:
+            purl: The PackageURL of the package to query.
+            params: Optional query parameters for the API request.
+
+        Returns:
+            A list of `IssuePydanticModel` instances.
+        """
+        self._logger.debug(f"[Org ID: {self.id}] Fetching issues for purl: {purl.to_string()}")
+        from .issue import IssuePydanticModel  # Local import
+
+        _params = params if params is not None else {}
+        uri = f"/rest/orgs/{self.id}/packages/{purl.to_string()}/issues"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"token {self._api_client.token}",
+        }
+        current_api_params = {"version": API_VERSION_ORG, "limit": 100}
+        current_api_params.update(_params)
+
+        issue_data_items: List[Dict[str, Any]] = []
+        try:
+            for issue_data_item in self._api_client.paginate(
+                endpoint=uri, params=current_api_params, headers=headers, data_key="data"
+            ):
+                issue_data_items.append(issue_data_item)
+        except Exception as e_paginate:
+            self._logger.error(
+                f"[Org ID: {self.id}] Error paginating issues for purl: {e_paginate}",
+                exc_info=True,
+            )
+            return []
+
+        if not issue_data_items:
+            self._logger.info(
+                f"[Org ID: {self.id}] No issues found for this purl with params: {json.dumps(_params)}."
+            )
+            return []
+
+        issue_futures = []
+        for issue_data in issue_data_items:
+            future = self._api_client.submit_task(
+                IssuePydanticModel.from_api_response,
+                issue_data,
+                self._api_client,
+                organization=self,
+                group=self._group,
+            )
+            issue_futures.append(future)
+
+        issue_results: List[IssuePydanticModel] = []
+        for future in concurrent.futures.as_completed(issue_futures):
+            try:
+                issue_instance = future.result()
+                if issue_instance:
+                    issue_results.append(issue_instance)
+            except Exception as e_future:
+                self._logger.error(
+                    f"[Org ID: {self.id}] Error instantiating Issue model from purl: {e_future}",
+                    exc_info=True,
+                )
+
+        self._logger.info(
+            f"[Org ID: {self.id}] Fetched and instantiated {len(issue_results)} issues for purl with params: {json.dumps(_params)}."
+        )
+        return issue_results
+
 
 OrganizationPydanticModel.update_forward_refs()

@@ -420,11 +420,9 @@ class GroupPydanticModel(BaseModel):
             org_data = response.json().get('data')
             if org_data:
                 org_group_id = org_data.get('relationships',{}).get('group',{}).get('data',{}).get('id')
-                if org_group_id == self.id:
-                    return OrganizationPydanticModel.from_api_response(org_data, self._api_client, self)
-                else:
+                if org_group_id != self.id:
                     self._logger.warning(f"Org {org_id} fetched but belongs to group {org_group_id}, not {self.id}.")
-                    return None
+                return OrganizationPydanticModel.from_api_response(org_data, self._api_client, self)
             return None
         except Exception as e:
             self._logger.error(f"[Group ID: {self.id}] Error fetching organization {org_id}: {e}", exc_info=True)

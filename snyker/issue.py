@@ -73,9 +73,9 @@ class IssueProblem(BaseModel):
     id: str
     type: Optional[str] = None
     source: Optional[str] = None
-    updated_at: Optional[Any] = Field(default=None, alias="updatedAt") 
-    disclosed_at: Optional[Any] = Field(default=None, alias="disclosedAt")
-    discovered_at: Optional[Any] = Field(default=None, alias="discoveredAt")
+    updated_at: Optional[Any] = Field(default=None) 
+    disclosed_at: Optional[Any] = Field(default=None)
+    discovered_at: Optional[Any] = Field(default=None)
     url: Optional[str] = None
 
     @field_validator('updated_at', 'disclosed_at', 'discovered_at', mode='before')
@@ -89,7 +89,7 @@ class IssueProblem(BaseModel):
 class IssueSeverity(BaseModel):
     """Severity information for an issue."""
     level: Optional[str] = None
-    modification_time: Optional[Any] = Field(default=None, alias="modificationTime")
+    modification_time: Optional[Any] = Field(default=None)
     score: Optional[float] = None
     source: Optional[str] = None
     vector: Optional[str] = None
@@ -168,19 +168,19 @@ class IssueRisk(BaseModel):
 
 class IssueAttributes(BaseModel):
     """Core attributes of a Snyk issue."""
-    created_at: Optional[Any] = Field(default=None, alias="createdAt")
-    updated_at: Optional[Any] = Field(default=None, alias="updatedAt")
+    created_at: Optional[Any] = Field(default=None)
+    updated_at: Optional[Any] = Field(default=None)
     title: str 
-    effective_severity_level: Optional[str] = Field(default=None, alias="effectiveSeverityLevel")
+    effective_severity_level: Optional[str] = Field(default=None)
     ignored: bool = Field(default=False)
     key: Optional[str] = None
-    status: str
+    status: Optional[str] = None
     type: Optional[str] = None # Added field for issue type (e.g., "license", "vuln", "iac")
-    key_asset: Optional[str] = Field(default=None, alias="keyAsset")
+    key_asset: Optional[str] = Field(default=None)
     tool: Optional[str] = None
     
-    resolved_at: Optional[Any] = Field(default=None, alias="resolvedAt")
-    resolution_type: Optional[str] = Field(default=None, alias="resolutionType")
+    resolved_at: Optional[Any] = Field(default=None)
+    resolution_type: Optional[str] = Field(default=None)
 
     coordinates: List[IssueCoordinate] = Field(default_factory=list)
     classes: List[IssueClass] = Field(default_factory=list)
@@ -215,7 +215,7 @@ class RelationshipData(BaseModel):
 class IssueRelationships(BaseModel):
     """Relationships of a Snyk issue to other entities."""
     organization: Optional[RelationshipData] = None
-    scan_item: Optional[RelationshipData] = Field(default=None, alias="scanItem")
+    scan_item: Optional[RelationshipData] = Field(default=None)
     ignore: Optional[RelationshipData] = None
 
 class IssuePydanticModel(BaseModel):
@@ -286,7 +286,7 @@ class IssuePydanticModel(BaseModel):
         return self.attributes.effective_severity_level
 
     @property
-    def status(self) -> str:
+    def status(self) -> Optional[str]:
         """The current status of the issue (e.g., 'open', 'resolved')."""
         return self.attributes.status
         
