@@ -1,17 +1,16 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+# pyproject.toml (fully converted for Poetry)
 
-[project]
-name = "snyker" # Replace with your package's actual name
-version = "0.2.0"          # Replace with your package's version
-authors = [
-    { name = "Tim Gowan", email = "tim.gowan@snyk.io" },
-]
+[tool.poetry]
+name = "snyker"
+version = "0.2.0"
 description = "Collection of utilities leveraging the Snyk API and a wrapper for the Snyk CLI"
-readme = "README.md"
+authors = ["Tim Gowan <tim.gowan@snyk.io>"]
 license = "Apache-2.0"
-requires-python = ">=3.11"
+readme = "README.md"
+homepage = "https://github.com/tim-snyk/snyker"
+repository = "https://github.com/tim-snyk/snyker"
+documentation = "https://github.com/tim-snyk/snyker/blob/main/README.md"
+keywords = ["snyk", "snyk-api", "snyk-cli", "automation", "security"]
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.11",
@@ -19,36 +18,31 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
-keywords = ["snyk", "snyk-cli","snyk-cli", "automation", "security"] # Add relevant keywords
 
-# This is the section derived from your import statements
-dependencies = [
-    "requests>=2.31.0", # For 'import requests'
-    "urllib3",          # For 'from urllib3.util.retry import Retry'
-    "pydantic>=2.0"     # For Pydantic models
-]
-
-[project.urls]
-"Homepage" = "https://github.com/tim-snyk/snyker"
-"Bug Tracker" = "https://github.com/tim-snyk/snyker/issues"
-"Documentation" = "https://github.com/tim-snyk/snyker/blob/main/README.md"
-
-# Optional: if you have command-line scripts
-# [project.scripts]
-# my-command = "my_awesome_package.module:main_function"
+[tool.poetry.dependencies]
+python = ">=3.11"
+requests = ">=2.32.4,<3.0.0"
+urllib3 = ">=2.5.0,<3.0.0"
+pydantic = ">=2.0"
 
 [tool.poetry.group.dev.dependencies]
 flake8 = "^7.2.0"
 black = "^25.1.0"
 
+# The build-system section now points to Poetry's build backend
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# Your custom tool configuration remains unchanged
 [tool.snyker.api_client]
 base_url = "https://api.snyk.io"
 max_retries = 15
 backoff_factor = 0.5
-status_forcelist = [429, 500, 502, 503, 504] # HTTP status codes that trigger a retry
-logging_level = "INFO" # Changed to DEBUG
-default_rate_limit_retry_after = 5.0 # Default seconds to wait if 429 response has no Retry-After header
-default_page_limit = 100 # Default number of items to request per page for paginated API calls
+status_forcelist = [429, 500, 502, 503, 504]
+logging_level = "INFO"
+default_rate_limit_retry_after = 5.0
+default_page_limit = 100
 
 [tool.snyker.sdk_settings]
-loading_strategy = "lazy" # Options: "lazy", "eager". Determines default data fetching behavior.
+loading_strategy = "lazy"
