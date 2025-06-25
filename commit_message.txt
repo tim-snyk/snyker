@@ -1,0 +1,24 @@
+feat: Add Memory Bank, parameterize examples, and prep for Pydantic v3
+
+This commit introduces several new features and improvements to the snyker library and example scripts.
+
+Features:
+- Adds a new `PackageURL` model for representing Package URLs.
+- Implements a `fetch_issues_for_purl` method on the `Organization` model to query for issues using a PURL.
+- Adds a new example script, `find_issues_by_purl.py`, to demonstrate the PURL functionality.
+- Adds a new example script, `monitor_and_find_critical_issues.py`, to demonstrate a CI/CD gating workflow. This script is parameterized for use in CI/CD environments and includes time-based policy checks.
+- Adds the Memory Bank, a set of documents that serve as the long-term memory for the AI developer, Cline.
+
+Fixes:
+- Fixes a bug in the `Organization` model where issues were not being fetched correctly.
+- Fixes a bug in the `Group` model where the organization lookup was too strict.
+- Fixes several parsing issues in the `Issue` model to correctly handle all timestamp and severity fields from the Snyk API.
+- Addresses Pydantic v2 deprecation warnings by replacing `class Config:` with `model_config = ConfigDict(...)` and `update_forward_refs()` with `model_rebuild()`, preparing the codebase for a future migration to Pydantic v3.
+
+Tests:
+- Adds a new test file, `test_purl_model.py`, with unit tests for the `PackageURL` model.
+- Simplifies the existing unit tests to make them faster and more focused.
+
+Tooling:
+- Unifies the project's tooling around Poetry, including updating the `pyproject.toml` and the GitHub Actions workflow.
+- Configures `flake8` to correctly lint the project's source code.

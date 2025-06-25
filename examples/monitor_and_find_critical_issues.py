@@ -18,6 +18,7 @@ Prerequisites:
 Usage:
 poetry run python examples/monitor_and_find_critical_issues.py --repository-url <URL>
 """
+
 import argparse
 import configparser
 import json
@@ -28,13 +29,24 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-from snyker import APIClient, CLIWrapper, GroupPydanticModel, IssuePydanticModel, ProjectPydanticModel
+from snyker import (
+    APIClient,
+    CLIWrapper,
+    GroupPydanticModel,
+    IssuePydanticModel,
+    ProjectPydanticModel,
+)
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
-def get_violating_issues(issues: List[IssuePydanticModel], days_threshold: int) -> List[IssuePydanticModel]:
+
+def get_violating_issues(
+    issues: List[IssuePydanticModel], days_threshold: int
+) -> List[IssuePydanticModel]:
     """
     Finds all issues that are older than the specified threshold and not ignored.
 
@@ -54,7 +66,7 @@ def get_violating_issues(issues: List[IssuePydanticModel], days_threshold: int) 
             continue
 
         attrs = issue.attributes
-        
+
         # First, check the disclosed and discovered dates
         if attrs.problems:
             for problem in attrs.problems:
@@ -82,8 +94,9 @@ def get_violating_issues(issues: List[IssuePydanticModel], days_threshold: int) 
                 if ts and ts < threshold_datetime:
                     violating_issues.append(issue)
                     break
-    
+
     return violating_issues
+
 
 def get_repo_url_from_git_config(project_directory: str) -> str | None:
     """
@@ -110,14 +123,26 @@ def get_repo_url_from_git_config(project_directory: str) -> str | None:
     except (configparser.NoSectionError, configparser.NoOptionError):
         return None
 
+
 def main():
     """
     Main function to monitor a project and apply a time-based issue policy.
     """
-    parser = argparse.ArgumentParser(description="Monitor a project and apply a time-based issue policy.")
-    parser.add_argument("--project-directory", default=".", help="The path to the project to be scanned.")
+    parser = argparse.ArgumentParser(
+        description="Monitor a project and apply a time-based issue policy."
+    )
+    parser.add_argument(
+        "--project-directory",
+        default=".",
+        help="The path to the project to be scanned.",
+    )
     parser.add_argument("--repository-url", help="The URL of the remote repository.")
-    parser.add_argument("--fail-open-days", type=int, default=30, help="The number of days for the time-based policy.")
+    parser.add_argument(
+        "--fail-open-days",
+        type=int,
+        default=30,
+        help="The number of days for the time-based policy.",
+    )
     args = parser.parse_args()
 
     project_directory = args.project_directory
@@ -132,24 +157,32 @@ def main():
     if not repository_url:
         repository_url = get_repo_url_from_git_config(project_directory)
         if not repository_url:
-            logger.error("Could not determine repository URL from .git/config. Please provide it with --repository-url.")
+            logger.error(
+                "Could not determine repository URL from .git/config. Please provide it with --repository-url."
+            )
             sys.exit(1)
 
     logger.info("Initializing Snyk API Client and Group...")
     api_client = APIClient()
-    group = GroupPydanticModel.get_instance(api_client=api_client, group_id=snyk_group_id)
+    group = GroupPydanticModel.get_instance(
+        api_client=api_client, group_id=snyk_group_id
+    )
     snyk_cli = CLIWrapper(group=group, api_client=api_client)
 
     # --- 1. Run `snyk monitor` ---
-    logger.info(f"Finding Snyk asset for repository URL: {repository_url} to determine Org ID.")
+    logger.info(
+        f"Finding Snyk asset for repository URL: {repository_url} to determine Org ID."
+    )
     assets = snyk_cli.find_assets_from_repository_url(repository_url)
     if not assets:
         logger.error(f"No Snyk asset found for repository: {repository_url}")
         sys.exit(1)
-    
+
     asset_with_single_org = next((a for a in assets if len(a.organizations) == 1), None)
     if not asset_with_single_org:
-        logger.error(f"Could not find an asset for {repository_url} with a single organization.")
+        logger.error(
+            f"Could not find an asset for {repository_url} with a single organization."
+        )
         sys.exit(1)
 
     org_id = asset_with_single_org.organizations[0].id
@@ -160,8 +193,13 @@ def main():
     print(f"--------------------------")
 
     snyk_cli.change_directory(project_directory)
-    monitor_params = {'monitor': None, '--json': None, '--org': org_id, '--remote-repo-url': repository_url}
-    
+    monitor_params = {
+        "monitor": None,
+        "--json": None,
+        "--org": org_id,
+        "--remote-repo-url": repository_url,
+    }
+
     logger.info("Executing `snyk monitor`...")
     result = snyk_cli.run(params=monitor_params)
 
@@ -175,13 +213,15 @@ def main():
         if not uri:
             logger.error("Could not find 'uri' in `snyk monitor` JSON output.")
             sys.exit(1)
-        
-        project_id = uri.split('/project/')[1].split('/')[0]
+
+        project_id = uri.split("/project/")[1].split("/")[0]
         logger.info(f"Successfully monitored. Snyk Project ID: {project_id}")
         print(f"\nProject monitored: {monitor_output.get('projectName')} ({uri})")
 
     except (json.JSONDecodeError, IndexError) as e:
-        logger.error(f"Failed to parse project ID from `snyk monitor` output: {e}\nRaw stdout: {result.stdout}")
+        logger.error(
+            f"Failed to parse project ID from `snyk monitor` output: {e}\nRaw stdout: {result.stdout}"
+        )
         sys.exit(1)
 
     # --- 2. Fetch Project and Issues from API ---
@@ -189,14 +229,16 @@ def main():
         # First, we need the organization object to fetch the project
         organization = asset_with_single_org.organizations[0]
         project = ProjectPydanticModel.from_api_response(
-            project_data={'id': project_id},
+            project_data={"id": project_id},
             api_client=api_client,
             organization=organization,
-            fetch_full_details_if_summary=True
+            fetch_full_details_if_summary=True,
         )
 
-        if project.status != 'active':
-            logger.warning(f"Project {project.name} (ID: {project.id}) is not active. Status: {project.status}")
+        if project.status != "active":
+            logger.warning(
+                f"Project {project.name} (ID: {project.id}) is not active. Status: {project.status}"
+            )
 
         print(f"\n--- Project Details ---")
         print(f"  Name: {project.name}")
@@ -207,14 +249,16 @@ def main():
         print(f"-----------------------")
 
         logger.info(f"Fetching issues for project: {project.name} (ID: {project.id})")
-        
+
         # Poll for issues to allow the backend to populate them
         all_issues = []
-        for i in range(5): # Poll up to 5 times
+        for i in range(5):  # Poll up to 5 times
             all_issues = project.fetch_issues()
             if all_issues:
                 break
-            logger.info(f"No issues found yet, polling again in 5 seconds... (Attempt {i+1}/5)")
+            logger.info(
+                f"No issues found yet, polling again in 5 seconds... (Attempt {i+1}/5)"
+            )
             time.sleep(5)
 
         if not all_issues:
@@ -226,43 +270,62 @@ def main():
 
         # --- 3. Apply Logic and Determine Pass/Fail ---
         critical_high_issues = [
-            issue for issue in all_issues 
-            if issue.attributes.effective_severity_level in ['critical', 'high']
+            issue
+            for issue in all_issues
+            if issue.attributes.effective_severity_level in ["critical", "high"]
         ]
-        
+
         violating_issues = get_violating_issues(critical_high_issues, fail_open_days)
 
         if violating_issues:
-            print(f"\nCI/CD GATE: FAIL - Found {len(violating_issues)} critical/high issues older than {fail_open_days} days:")
+            print(
+                f"\nCI/CD GATE: FAIL - Found {len(violating_issues)} critical/high issues older than {fail_open_days} days:"
+            )
             for issue in violating_issues:
                 attrs = issue.attributes
                 print(f"\n-----------------------------------------")
                 print(f"  Title: {attrs.title}")
                 print(f"  Issue ID: {issue.id}")
-                print(f"  Severity: {attrs.effective_severity_level.capitalize() if attrs.effective_severity_level else 'N/A'}")
+                print(
+                    f"  Severity: {attrs.effective_severity_level.capitalize() if attrs.effective_severity_level else 'N/A'}"
+                )
                 print(f"  Type: {attrs.type}")
                 print(f"  Ignored: {attrs.ignored}")
                 print("\n  --- Timestamps ---")
-                print(f"    Issue Created At: {attrs.created_at.isoformat() if attrs.created_at else 'N/A'}")
-                print(f"    Issue Updated At: {attrs.updated_at.isoformat() if attrs.updated_at else 'N/A'}")
+                print(
+                    f"    Issue Created At: {attrs.created_at.isoformat() if attrs.created_at else 'N/A'}"
+                )
+                print(
+                    f"    Issue Updated At: {attrs.updated_at.isoformat() if attrs.updated_at else 'N/A'}"
+                )
                 if attrs.problems:
                     for i, problem in enumerate(attrs.problems):
-                        if problem.source == 'NVD':
-                            print(f"    NVD Last Modified: {problem.updated_at.isoformat() if problem.updated_at else 'N/A'}")
+                        if problem.source == "NVD":
+                            print(
+                                f"    NVD Last Modified: {problem.updated_at.isoformat() if problem.updated_at else 'N/A'}"
+                            )
                         else:
-                            print(f"    Problem ({problem.source}) Updated At: {problem.updated_at.isoformat() if problem.updated_at else 'N/A'}")
+                            print(
+                                f"    Problem ({problem.source}) Updated At: {problem.updated_at.isoformat() if problem.updated_at else 'N/A'}"
+                            )
                 print(f"-----------------------------------------")
             sys.exit(1)
         else:
-            print(f"\nCI/CD GATE: PASS - No critical/high issues are older than {fail_open_days} days.")
+            print(
+                f"\nCI/CD GATE: PASS - No critical/high issues are older than {fail_open_days} days."
+            )
             sys.exit(0)
 
     except Exception as e:
-        logger.error(f"An error occurred during issue fetching or policy check: {e}", exc_info=True)
+        logger.error(
+            f"An error occurred during issue fetching or policy check: {e}",
+            exc_info=True,
+        )
         sys.exit(1)
     finally:
         logger.info("Closing API client.")
         api_client.close()
+
 
 if __name__ == "__main__":
     main()

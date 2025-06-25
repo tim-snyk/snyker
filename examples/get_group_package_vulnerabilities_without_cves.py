@@ -11,21 +11,26 @@ Prerequisites:
 - Set the SNYK_TOKEN environment variable with a Snyk API token.
 - Set the SNYK_GROUP_ID environment variable with the ID of the Snyk Group to target.
 """
+
 from snyker import GroupPydanticModel, APIClient, IssuePydanticModel
 from typing import List
 import os
 import logging
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 def main():
     """
     Main function to fetch and identify package vulnerabilities without CVEs.
     """
+    from snyker.config import EXAMPLES_CONFIG
     snyk_token = os.getenv("SNYK_TOKEN")
-    snyk_group_id = os.getenv("SNYK_GROUP_ID")
+    snyk_group_id = os.getenv("SNYK_GROUP_ID", EXAMPLES_CONFIG.get("group_id"))
 
     if not snyk_token:
         logger.error("Error: SNYK_TOKEN environment variable not set.")
@@ -45,42 +50,55 @@ def main():
 
     try:
         logger.info(f"Attempting to initialize Group: {snyk_group_id}")
-        group = GroupPydanticModel.get_instance(api_client=api_client, group_id=snyk_group_id)
+        group = GroupPydanticModel.get_instance(
+            api_client=api_client, group_id=snyk_group_id
+        )
         logger.info(f"Successfully initialized Group: '{group.name}' (ID: {group.id})")
     except ValueError as e:
         logger.error(f"Error initializing Group (ID: {snyk_group_id}): {e}")
         api_client.close()
         return
     except Exception as e:
-        logger.error(f"An unexpected error occurred during Group initialization: {e}", exc_info=True)
+        logger.error(
+            f"An unexpected error occurred during Group initialization: {e}",
+            exc_info=True,
+        )
         api_client.close()
         return
 
     vulnerabilities_without_cve: List[IssuePydanticModel] = []
 
     try:
-        logger.info(f"Fetching 'package_vulnerability' issues for Group '{group.name}'...")
+        logger.info(
+            f"Fetching 'package_vulnerability' issues for Group '{group.name}'..."
+        )
         # The SDK's paginate method handles fetching all issues across pages
         # We filter by type at the API level for efficiency.
-        issue_params = {'type': 'package_vulnerability', 'limit': 100}
-        package_vulnerabilities: List[IssuePydanticModel] = group.fetch_issues(params=issue_params)
-        
-        logger.info(f"Fetched {len(package_vulnerabilities)} package vulnerabilities. Analyzing for CVEs...")
+        issue_params = {"type": "package_vulnerability", "limit": 100}
+        package_vulnerabilities: List[IssuePydanticModel] = group.fetch_issues(
+            params=issue_params
+        )
+
+        logger.info(
+            f"Fetched {len(package_vulnerabilities)} package vulnerabilities. Analyzing for CVEs..."
+        )
 
         for issue in package_vulnerabilities:
-            has_cve_identifier = False # Renamed for clarity and to avoid conflict if 'has_cve' is used elsewhere
+            has_cve_identifier = False  # Renamed for clarity and to avoid conflict if 'has_cve' is used elsewhere
             # Check the problems array first
             if issue.attributes and issue.attributes.problems:
                 for problem in issue.attributes.problems:
                     if problem.source and problem.source.upper() == "CVE":
                         has_cve_identifier = True
-                        break # Found a CVE in problems, no need to check further for this issue
-            
+                        break  # Found a CVE in problems, no need to check further for this issue
+
             # If no CVE found in problems, then check the issue title
             if not has_cve_identifier and issue.attributes and issue.attributes.title:
-                if "CVE-" in issue.attributes.title.upper(): # Case-insensitive check in title
+                if (
+                    "CVE-" in issue.attributes.title.upper()
+                ):  # Case-insensitive check in title
                     has_cve_identifier = True
-            
+
             if not has_cve_identifier:
                 vulnerabilities_without_cve.append(issue)
 
@@ -90,16 +108,21 @@ def main():
                 project_info = ""
                 if issue.relationships and issue.relationships.scan_item:
                     project_info = f" (Project ID: {issue.relationships.scan_item.id})"
-                
+
                 # Attempt to get project name if the project object is loaded (depends on SDK loading strategy)
                 # This is a best-effort for more context in the output.
                 project_name_str = ""
-                if issue._project and issue._project.name: # Accessing private _project for example purposes
+                if (
+                    issue._project and issue._project.name
+                ):  # Accessing private _project for example purposes
                     project_name_str = f", Project Name: {issue._project.name}"
 
-
-                print(f"- ID: {issue.id}, Title: \"{issue.title}\"{project_info}{project_name_str}")
-            logger.info(f"Found {len(vulnerabilities_without_cve)} package vulnerabilities without CVEs.")
+                print(
+                    f'- ID: {issue.id}, Title: "{issue.title}"{project_info}{project_name_str}'
+                )
+            logger.info(
+                f"Found {len(vulnerabilities_without_cve)} package vulnerabilities without CVEs."
+            )
         else:
             print("\nNo package vulnerabilities found without CVEs in this group.")
             logger.info("No package vulnerabilities found without CVEs in this group.")
@@ -110,6 +133,7 @@ def main():
         logger.info("Closing the API client...")
         api_client.close()
         logger.info("API client closed. Script finished.")
+
 
 if __name__ == "__main__":
     main()

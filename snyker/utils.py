@@ -17,16 +17,16 @@ def search_json(json_obj: Any, search_string: str) -> bool:
     """
     if isinstance(json_obj, dict):
         for key, value in json_obj.items():
-            if isinstance(key, str) and search_string in key: # Check keys
+            if isinstance(key, str) and search_string in key:  # Check keys
                 return True
-            if search_json(value, search_string): # Recurse on values
+            if search_json(value, search_string):  # Recurse on values
                 return True
     elif isinstance(json_obj, list):
         for item in json_obj:
-            if search_json(item, search_string): # Recurse on list items
+            if search_json(item, search_string):  # Recurse on list items
                 return True
     elif isinstance(json_obj, str):
-        if search_string in json_obj: # Base case: string found
+        if search_string in json_obj:  # Base case: string found
             return True
     return False
 
@@ -44,15 +44,15 @@ def datetime_converter(iso_string_with_z: str) -> datetime:
     Returns:
         A timezone-aware datetime object (UTC).
     """
-    datetime_str_part = iso_string_with_z[:-1] # Remove the 'Z' suffix
+    datetime_str_part = iso_string_with_z[:-1]  # Remove the 'Z' suffix
 
     # Determine the correct format string based on presence of fractional seconds
-    if '.' in datetime_str_part:
+    if "." in datetime_str_part:
         format_string = "%Y-%m-%dT%H:%M:%S.%f"
     else:
         format_string = "%Y-%m-%dT%H:%M:%S"
 
     dt_naive = datetime.strptime(datetime_str_part, format_string)
-    dt_aware = dt_naive.replace(tzinfo=timezone.utc) # Make timezone-aware (UTC)
+    dt_aware = dt_naive.replace(tzinfo=timezone.utc)  # Make timezone-aware (UTC)
 
     return dt_aware

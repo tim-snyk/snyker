@@ -8,9 +8,11 @@ Prerequisites:
 - Ensure the 'snyker' package is installed.
 - Set the SNYK_TOKEN environment variable with a Snyk Group-scoped Service Account token.
 """
-from importlib import metadata # For fetching SDK version
+
+from importlib import metadata  # For fetching SDK version
 from snyker import GroupPydanticModel, APIClient
 import os
+
 
 def main():
     """
@@ -27,7 +29,7 @@ def main():
     # Initialize the APIClient.
     # You can customize parameters like max_retries, backoff_factor, logging_level.
     # Logging level: 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
-    api_client = APIClient(logging_level=20) # Default is INFO
+    api_client = APIClient(logging_level=20)  # Default is INFO
 
     print("Initializing Snyk Group...")
     try:
@@ -35,25 +37,33 @@ def main():
         # If your token is associated with multiple Snyk Groups, GroupPydanticModel.get_instance()
         # will raise a ValueError unless a specific 'group_id' is provided.
         # Using a known test group ID for this example. Replace with your actual group ID if needed.
-        test_group_id = "9365faba-3e72-4fda-9974-267779137aa6" 
-        group = GroupPydanticModel.get_instance(api_client=api_client, group_id=test_group_id)
+        test_group_id = "9365faba-3e72-4fda-9974-267779137aa6"
+        group = GroupPydanticModel.get_instance(
+            api_client=api_client, group_id=test_group_id
+        )
         print(f"Successfully connected to Snyk Group: '{group.name}' (ID: {group.id})")
         # Get and print the SDK version dynamically
         try:
             sdk_version = metadata.version("snyker")
             print(f"SDK Version: {sdk_version}")
         except metadata.PackageNotFoundError:
-            print("SDK Version: snyker (version not found, package may not be installed in editable mode or distribution not found)")
+            print(
+                "SDK Version: snyker (version not found, package may not be installed in editable mode or distribution not found)"
+            )
 
     except ValueError as e:
         print(f"Error initializing Snyk Group: {e}")
-        print("This can happen if your SNYK_TOKEN is associated with multiple groups and a specific group_id was not provided.")
-        print("Try: group = GroupPydanticModel.get_instance(api_client=api_client, group_id='your-actual-group-id')")
+        print(
+            "This can happen if your SNYK_TOKEN is associated with multiple groups and a specific group_id was not provided."
+        )
+        print(
+            "Try: group = GroupPydanticModel.get_instance(api_client=api_client, group_id='your-actual-group-id')"
+        )
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
     finally:
         # Important: Always close the APIClient when done to clean up resources.
-        if 'api_client' in locals() and api_client:
+        if "api_client" in locals() and api_client:
             print("Closing API client...")
             api_client.close()
 
@@ -61,6 +71,7 @@ def main():
     print("please see the script in the 'examples/' directory:")
     print("  python examples/basic_sdk_usage.py")
     print("\nScript finished.")
+
 
 if __name__ == "__main__":
     main()

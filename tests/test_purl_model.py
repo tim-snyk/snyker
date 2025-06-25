@@ -1,4 +1,5 @@
 """Tests for the PURL model."""
+
 from snyker.purl import PackageURL
 
 

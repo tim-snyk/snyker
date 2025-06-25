@@ -1,10 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional, Dict
-if TYPE_CHECKING:
-    pass # Keep for other type-checking only imports if any
 
-from snyker import Asset, APIClient # Ensure Asset and APIClient are imported for runtime
-from snyker import GroupPydanticModel
+if TYPE_CHECKING:
+    pass  # Keep for other type-checking only imports if any
+
+from .asset import Asset
+from .api_client import APIClient
+from .group import GroupPydanticModel
 import os
 import subprocess
 import traceback
@@ -28,10 +30,13 @@ class CLIWrapper:
             Can be auto-detected from CI environment variables or overridden.
         org_id: The Snyk Organization ID, often determined from an asset.
     """
-    def __init__(self,
-                 group: Optional[GroupPydanticModel] = None,
-                 project_directory_override: Optional[str] = None,
-                 api_client: Optional[APIClient] = None):
+
+    def __init__(
+        self,
+        group: Optional[GroupPydanticModel] = None,
+        project_directory_override: Optional[str] = None,
+        api_client: Optional[APIClient] = None,
+    ):
         """Initializes the CLIWrapper.
 
         Args:
@@ -42,13 +47,13 @@ class CLIWrapper:
                 environment variables.
             api_client: An optional `APIClient` instance. If not provided,
                 a default one is created.
-        
+
         Raises:
             ValueError: If `GroupPydanticModel.get_instance()` fails when `group`
                 is not provided (e.g., multiple groups found for the token).
         """
         self.org_id = None
-        
+
         if api_client:
             self.api_client = api_client
         else:
@@ -64,21 +69,23 @@ class CLIWrapper:
             except ValueError as e:
                 self.logger.error(f"Failed to initialize Group in CLIWrapper: {e}")
                 raise
-        
-        self.assets: Optional[List[Asset]] = None 
+
+        self.assets: Optional[List[Asset]] = None
         self.project_directory: Optional[str] = None
 
         if project_directory_override:
             self.project_directory = project_directory_override
-            self.logger.info(f"Using explicitly provided project directory: {self.project_directory}")
+            self.logger.info(
+                f"Using explicitly provided project directory: {self.project_directory}"
+            )
         else:
             known_ci_vars = [
-                ('GITHUB_WORKSPACE', 'GitHub Actions'),
-                ('CI_PROJECT_DIR', 'GitLab CI'),
-                ('BITBUCKET_CLONE_DIR', 'Bitbucket Pipelines'),
-                ('CIRCLE_WORKING_DIRECTORY', 'CircleCI'),
-                ('WORKSPACE', 'Jenkins / Generic'),
-                ('BUILD_SOURCESDIRECTORY', 'Azure DevOps'),
+                ("GITHUB_WORKSPACE", "GitHub Actions"),
+                ("CI_PROJECT_DIR", "GitLab CI"),
+                ("BITBUCKET_CLONE_DIR", "Bitbucket Pipelines"),
+                ("CIRCLE_WORKING_DIRECTORY", "CircleCI"),
+                ("WORKSPACE", "Jenkins / Generic"),
+                ("BUILD_SOURCESDIRECTORY", "Azure DevOps"),
             ]
             detected_ci_env = "Unknown"
 
@@ -92,7 +99,7 @@ class CLIWrapper:
                         f"Using project directory: {self.project_directory} (from ${var_name})"
                     )
                     break
-            
+
             if not self.project_directory:
                 checked_vars_str = ", ".join([f"${var}" for var, _ in known_ci_vars])
                 self.logger.warning(
@@ -117,7 +124,9 @@ class CLIWrapper:
             self.logger.info(f"Changed working directory to: {directory}")
         elif self.project_directory is not None:
             os.chdir(self.project_directory)
-            self.logger.info(f"Changed working directory to project directory: {self.project_directory}")
+            self.logger.info(
+                f"Changed working directory to project directory: {self.project_directory}"
+            )
         else:
             self.logger.warning(
                 "No project directory specified or auto-detected. Current directory remains unchanged."
@@ -134,8 +143,10 @@ class CLIWrapper:
                 version of the Snyk CLI (e.g., "1.1000.0").
         """
         try:
-            result = subprocess.run(['snyk', '-v'], capture_output=True, text=True, check=False)
-            if result.returncode == 127: # Command not found
+            result = subprocess.run(
+                ["snyk", "-v"], capture_output=True, text=True, check=False
+            )
+            if result.returncode == 127:  # Command not found
                 self.logger.error("Snyk CLI not found. Please install Snyk CLI.")
                 exit(1)
             if result.returncode != 0:
@@ -144,15 +155,19 @@ class CLIWrapper:
             version = result.stdout.strip()
             self.logger.info(f"Using Snyk CLI version {version}")
             if minimum_version and version < minimum_version:
-                self.logger.error(f"Snyk CLI version {version} is not supported. "
-                                  f"Please update to {minimum_version} or greater.")
+                self.logger.error(
+                    f"Snyk CLI version {version} is not supported. "
+                    f"Please update to {minimum_version} or greater."
+                )
                 exit(1)
         except Exception as e:
             self.logger.error(f"Error during Snyk CLI flight check: {e}")
             traceback.print_exc()
             exit(1)
 
-    def run(self, params: Optional[Dict[str, str]] = None, param_str: Optional[str] = None) -> subprocess.CompletedProcess:
+    def run(
+        self, params: Optional[Dict[str, str]] = None, param_str: Optional[str] = None
+    ) -> subprocess.CompletedProcess:
         """Runs a Snyk CLI command and returns the result.
 
         The command can be specified either as a dictionary of parameters (e.g.,
@@ -177,40 +192,52 @@ class CLIWrapper:
         """
         try:
             if param_str:
-                command = param_str.split(' ')
+                command = param_str.split(" ")
             else:
-                command = ['snyk']
+                command = ["snyk"]
                 if params:
                     for key, value in params.items():
-                        if value == '' or value is None:
-                            command.append(f'{key}')
+                        if value == "" or value is None:
+                            command.append(f"{key}")
                         else:
-                            command.append(f'{key}={value}')
-            
+                            command.append(f"{key}={value}")
+
             self.logger.info(f"Running Snyk CLI command: {' '.join(command)}")
-            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            result = subprocess.run(
+                command, capture_output=True, text=True, check=False
+            )
 
             if result.stderr:
                 self.logger.warning(f"Snyk CLI stderr: {result.stderr.strip()}")
-            
+
             if result.stdout:
                 self.logger.info(f"Snyk CLI returned code {result.returncode}")
-                self.logger.debug(f"Snyk CLI stdout (first 500 chars): {result.stdout.strip()[:500]}...")
+                self.logger.debug(
+                    f"Snyk CLI stdout (first 500 chars): {result.stdout.strip()[:500]}..."
+                )
             else:
-                self.logger.info(f"Snyk CLI returned code {result.returncode} with no stdout.")
+                self.logger.info(
+                    f"Snyk CLI returned code {result.returncode} with no stdout."
+                )
                 if result.returncode != 0 and not result.stderr:
-                    self.logger.error(f"Snyk CLI command failed with code {result.returncode} but no stderr/stdout.")
+                    self.logger.error(
+                        f"Snyk CLI command failed with code {result.returncode} but no stderr/stdout."
+                    )
             return result
 
         except FileNotFoundError:
-            self.logger.error("Snyk CLI command not found. Ensure Snyk CLI is installed and in PATH.")
-            exit(1) # Consider raising an exception instead of exiting
+            self.logger.error(
+                "Snyk CLI command not found. Ensure Snyk CLI is installed and in PATH."
+            )
+            exit(1)  # Consider raising an exception instead of exiting
         except Exception as e:
             self.logger.error(f"Error running Snyk CLI command: {e}")
             traceback.print_exc()
-            exit(1) # Consider raising an exception
+            exit(1)  # Consider raising an exception
 
-    def find_assets_from_repository_url(self, repository_url: Optional[str] = None) -> List[Asset]:
+    def find_assets_from_repository_url(
+        self, repository_url: Optional[str] = None
+    ) -> List[Asset]:
         """Finds Snyk assets matching a given repository URL.
 
         Args:
@@ -224,24 +251,34 @@ class CLIWrapper:
             self.logger.warning("repository_url is None. Cannot find assets.")
             return []
 
-        repo_name_segment = repository_url.split('/')[-1]
+        repo_name_segment = repository_url.split("/")[-1]
         query = {
             "query": {
                 "attributes": {
                     "operator": "and",
                     "values": [
-                        {"attribute": "type", "operator": "equal", "values": ["repository"]},
-                        {"attribute": "name", "operator": "contains", "values": [repo_name_segment]}
-                    ]
+                        {
+                            "attribute": "type",
+                            "operator": "equal",
+                            "values": ["repository"],
+                        },
+                        {
+                            "attribute": "name",
+                            "operator": "contains",
+                            "values": [repo_name_segment],
+                        },
+                    ],
                 }
             }
         }
-        
+
         self.assets = self.group.get_assets_by_query(query=query)
         if not self.assets:
             self.logger.warning(f"No assets found for repository URL: {repository_url}")
             return []
-        self.logger.info(f"Found {len(self.assets)} assets for repository URL: {repository_url}")
+        self.logger.info(
+            f"Found {len(self.assets)} assets for repository URL: {repository_url}"
+        )
         return self.assets
 
     def find_org_id_from_asset(self, asset: Optional[Asset] = None) -> Optional[str]:
@@ -257,24 +294,34 @@ class CLIWrapper:
             The Snyk Organization ID as a string if a single organization is found,
             otherwise `None`.
         """
-        if not asset or not asset.organizations: # asset.organizations uses the property
+        if (
+            not asset or not asset.organizations
+        ):  # asset.organizations uses the property
             asset_id_log = asset.id if asset else "N/A"
-            self.logger.warning(f"Asset is None or has no organizations. Asset ID: {asset_id_log}")
+            self.logger.warning(
+                f"Asset is None or has no organizations. Asset ID: {asset_id_log}"
+            )
             return None
 
         org_id = None
         if len(asset.organizations) > 1:
             org_ids_str = ", ".join([org.id for org in asset.organizations])
-            self.logger.warning(f"Asset {asset.id} associated with multiple organizations: [{org_ids_str}]. "
-                                "Cannot determine a single org_id.")
+            self.logger.warning(
+                f"Asset {asset.id} associated with multiple organizations: [{org_ids_str}]. "
+                "Cannot determine a single org_id."
+            )
         elif len(asset.organizations) == 1:
             org_id = asset.organizations[0].id
             self.logger.info(f"Asset {asset.id} matched with Organization ID: {org_id}")
-        else: # len(asset.organizations) == 0
-            self.logger.warning(f"Asset {asset.id} not associated with any organization.")
+        else:  # len(asset.organizations) == 0
+            self.logger.warning(
+                f"Asset {asset.id} not associated with any organization."
+            )
         return org_id
 
-    def get_business_criticality_from_asset(self, asset: Optional[Asset] = None) -> Optional[str]:
+    def get_business_criticality_from_asset(
+        self, asset: Optional[Asset] = None
+    ) -> Optional[str]:
         """Gets the business criticality mapping from an Asset's attributes.
 
         Args:
@@ -284,18 +331,25 @@ class CLIWrapper:
             The business criticality as a string ('critical', 'high', 'medium', 'low')
             or `None` if not determinable.
         """
-        if not asset or not asset.attributes.class_data or 'rank' not in asset.attributes.class_data:
+        if (
+            not asset
+            or not asset.attributes.class_data
+            or "rank" not in asset.attributes.class_data
+        ):
             asset_id_log = asset.id if asset else "N/A"
-            self.logger.warning(f"Asset {asset_id_log} has no class_data or rank in attributes.")
+            self.logger.warning(
+                f"Asset {asset_id_log} has no class_data or rank in attributes."
+            )
             return None
         try:
-            rank = int(asset.attributes.class_data['rank'])
-            mapping = {1: 'critical', 2: 'high', 3: 'medium', 4: 'low'}
+            rank = int(asset.attributes.class_data["rank"])
+            mapping = {1: "critical", 2: "high", 3: "medium", 4: "low"}
             return mapping.get(rank)
         except (ValueError, TypeError):
-            self.logger.warning(f"Invalid rank '{asset.attributes.class_data.get('rank')}' for asset {asset.id}.")
+            self.logger.warning(
+                f"Invalid rank '{asset.attributes.class_data.get('rank')}' for asset {asset.id}."
+            )
             return None
-
 
     def get_lifecycle_from_asset(self, asset: Optional[Asset] = None) -> Optional[str]:
         """Gets the lifecycle mapping from an Asset's attributes.
@@ -307,14 +361,18 @@ class CLIWrapper:
             The lifecycle stage as a string ('production', 'development', 'sandbox'),
             defaults to 'Development' if incompatible, or `None` if not set.
         """
-        lifecycle = asset.attributes.app_lifecycle if asset and asset.attributes else None
-        
+        lifecycle = (
+            asset.attributes.app_lifecycle if asset and asset.attributes else None
+        )
+
         if lifecycle is None:
             asset_id_log = asset.id if asset else "N/A"
-            self.logger.warning(f"Asset {asset_id_log} has no app_lifecycle attribute or is None.")
+            self.logger.warning(
+                f"Asset {asset_id_log} has no app_lifecycle attribute or is None."
+            )
             return None
 
-        if lifecycle in ['production', 'development', 'sandbox']:
+        if lifecycle in ["production", "development", "sandbox"]:
             return lifecycle
         else:
             asset_id_log = asset.id if asset else "N/A"
@@ -322,4 +380,4 @@ class CLIWrapper:
                 f"Asset attribute app_lifecycle ('{lifecycle}') is incompatible for asset "
                 f"{asset_id_log}. Defaulting to 'Development'."
             )
-            return 'Development'
+            return "Development"

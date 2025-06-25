@@ -15,6 +15,7 @@ Prerequisites:
 Usage:
 poetry run python examples/find_issues_by_purl.py <PURL>
 """
+
 import argparse
 import logging
 import os
@@ -24,14 +25,19 @@ from snyker import APIClient, GroupPydanticModel
 from snyker.purl import PackageURL
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 def main():
     """
     Main function to find issues for a purl.
     """
-    parser = argparse.ArgumentParser(description="Find issues for a specific package version using a PURL.")
+    parser = argparse.ArgumentParser(
+        description="Find issues for a specific package version using a PURL."
+    )
     parser.add_argument("purl", help="The Package URL (purl) of the package to query.")
     args = parser.parse_args()
 
@@ -46,10 +52,10 @@ def main():
     # A simple parser for the purl string.
     # This is not a complete purl parser, but it works for this example.
     try:
-        purl_parts = purl_str.split('/')
-        purl_type = purl_parts[0].replace('pkg:', '')
-        purl_name = purl_parts[-1].split('@')[0]
-        purl_version = purl_parts[-1].split('@')[1]
+        purl_parts = purl_str.split("/")
+        purl_type = purl_parts[0].replace("pkg:", "")
+        purl_name = purl_parts[-1].split("@")[0]
+        purl_version = purl_parts[-1].split("@")[1]
         purl_namespace = "/".join(purl_parts[1:-1]) if len(purl_parts) > 2 else None
     except IndexError:
         logger.error(f"Could not parse purl: {purl_str}")
@@ -64,13 +70,17 @@ def main():
 
     logger.info("Initializing Snyk API Client and Group...")
     api_client = APIClient()
-    group = GroupPydanticModel.get_instance(api_client=api_client, group_id=snyk_group_id)
+    group = GroupPydanticModel.get_instance(
+        api_client=api_client, group_id=snyk_group_id
+    )
 
     try:
         logger.info(f"Fetching organization: {snyk_org_id}")
         organization = group.get_organization_by_id(snyk_org_id)
         if not organization:
-            logger.error(f"Could not find organization with ID: {snyk_org_id} in group {group.name}")
+            logger.error(
+                f"Could not find organization with ID: {snyk_org_id} in group {group.name}"
+            )
             sys.exit(1)
 
         logger.info(f"Fetching issues for purl: {purl.to_string()}")
@@ -86,9 +96,13 @@ def main():
             print(f"\n-----------------------------------------")
             print(f"  Title: {attrs.title}")
             print(f"  Issue ID: {issue.id}")
-            print(f"  Severity: {attrs.effective_severity_level.capitalize() if attrs.effective_severity_level else 'N/A'}")
+            print(
+                f"  Severity: {attrs.effective_severity_level.capitalize() if attrs.effective_severity_level else 'N/A'}"
+            )
             print(f"  Type: {attrs.type}")
-            print(f"  Created Time: {attrs.created_at.isoformat() if attrs.created_at else 'N/A'}")
+            print(
+                f"  Created Time: {attrs.created_at.isoformat() if attrs.created_at else 'N/A'}"
+            )
             print(f"-----------------------------------------")
 
     except Exception as e:
@@ -97,6 +111,7 @@ def main():
     finally:
         logger.info("Closing API client.")
         api_client.close()
+
 
 if __name__ == "__main__":
     main()

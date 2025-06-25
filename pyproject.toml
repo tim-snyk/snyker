@@ -28,6 +28,7 @@ pydantic = ">=2.0"
 [tool.poetry.group.dev.dependencies]
 flake8 = "^7.2.0"
 black = "^25.1.0"
+pytest = "^8.3.5"
 
 # The build-system section now points to Poetry's build backend
 [build-system]
@@ -46,3 +47,14 @@ default_page_limit = 100
 
 [tool.snyker.sdk_settings]
 loading_strategy = "lazy"
+
+[tool.snyker.examples]
+group_id = "9365faba-3e72-4fda-9974-267779137aa6"
+org_id = "8c12aada-dec1-4670-a39e-60fc1ec59e55"
+project_id_sca = "915d2170-2e59-4a76-985f-47bf226999cf"
+project_id_sast = "73ee3b63-f372-44a9-8b06-5a708d5c5def"
+asset_name_contains = "snyker"
+asset_type = "repository"
+
+[tool.flake8]
+exclude = [".venv"]
