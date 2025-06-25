@@ -52,3 +52,17 @@ The development dependencies are:
 -   **PEP 8:** The code should be compliant with the PEP 8 style guide.
 -   **Docstrings:** All modules, classes, and functions should have comprehensive docstrings that follow the Google Python Style Guide.
 -   **AI-Friendly Code:** The code should be written in a way that is easy for AI models to understand and reason about. This includes using clear and descriptive variable names, writing simple and focused functions, and providing type hints for all function signatures.
+
+## Staying API Compliant
+
+As an AI, it is crucial that you adhere to the Snyk API specification to ensure all interactions are valid. You have access to the OpenAPI specification to guide you.
+
+1.  **API Specification Location**:
+    A local copy of the OpenAPI specification is stored in the `tmp/` directory. You can access it to understand endpoint definitions, parameters, and schemas.
+
+2.  **Querying the Specification**:
+    You can use tools like `jq` to query the JSON specification. For example, to get the definition for the "List Organization Issues" endpoint, you can use the following command:
+    ```bash
+    jq '.paths."/orgs/{org_id}/issues".get' tmp/rest-openapi.json
+    ```
+    This will provide you with the necessary information to construct valid API requests. Always verify your changes against the specification to maintain compliance.
