@@ -2,9 +2,11 @@ name: Python SDK Tests
 
 on:
   push:
-    branches: [ tim-dev ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   test:
