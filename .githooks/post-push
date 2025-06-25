@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Get the current branch name
+branch_name=$(git symbolic-ref --short HEAD)
+
+# Check if the current branch is not main
+if [ "$branch_name" != "main" ]; then
+  # Check if a PR already exists for this branch
+  if ! gh pr view "$branch_name" >/dev/null 2>&1; then
+    echo "Creating pull request for $branch_name"
+    gh pr create --base main --head "$branch_name" --fill
+  else
+    echo "Pull request for $branch_name already exists."
+  fi
+fi

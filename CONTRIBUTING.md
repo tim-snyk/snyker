@@ -30,13 +30,15 @@ If you have an idea for a new feature or an improvement to an existing one, plea
     *   Ensure your code adheres to the existing coding style (e.g., PEP 8).
     *   Write clear and concise commit messages.
 4.  **Guidelines for AI-Assisted Development**:
-    *   AI contributions are encouraged.
+    *   AI contributions are encouraged. To ensure consistency and alignment with the project's goals, all contributors (human and AI) should familiarize themselves with the project's memory bank, located in the `/memory-bank` directory.
+    *   The memory bank contains key information about the project's architecture, technical decisions, and development patterns. It is designed to be cross-compatible with various AI-assisted development tools.
     *   **AI Agent Instructions - Adhere to these best practices:**
+        *   **Consult the Memory Bank**: Before making any changes, review the contents of the `/memory-bank` directory to understand the project's context.
         *   **Unit Tests**: Generate unit tests for all new features and bug fixes.
         *   **Docstrings**: Add Google Python Style docstrings for all new public modules, classes, functions, and methods.
-        *   **Pattern Consistency**: Maintain existing design patterns, Pydantic model usage, and SDK architecture.
+        *   **Pattern Consistency**: Maintain existing design patterns, Pydantic model usage, and SDK architecture as outlined in the memory bank.
         *   **Logging**: Implement appropriate logging (DEBUG, INFO, WARNING, ERROR).
-        *   **API Compliance**: For Snyk API changes, consult the OpenAPI specification. If a local copy exists (see `README.md` "Developer Notes"), use `jq` to verify API details (endpoints, parameters, schemas) against it.
+        *   **API Compliance**: For Snyk API changes, consult the OpenAPI specification as described in the memory bank.
         *   **Avoid Cloud Features**: Do not implement or extend features related to Snyk's Cloud products (e.g., Snyk IaC interactions beyond basic project listing, specific cloud posture management API calls) as these areas may have deprecated or unstable API surfaces. Focus on core SCA, SAST, and Container features unless explicitly directed otherwise for Cloud.
 5.  **Testing**:
     *   Run existing tests to ensure no regressions: `poetry run python -m unittest discover tests -v`

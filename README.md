@@ -1,5 +1,7 @@
 # Snyker SDK
 
+The Snyker SDK is a Python-based toolkit designed for rapid iteration and experimentation with the Snyk API. It is built to be used by both human developers and AI agents, providing a flexible and intuitive interface for interacting with Snyk.
+
 DISCLAIMER: This is just a personal project and not officially covered by support nor directly endorsed by Snyk.
 
 **Required Environment Variables:**
@@ -90,31 +92,9 @@ Key configurable options include:
 
 To customize these, edit the `pyproject.toml` file. The SDK will load these settings on initialization. See `snyker/config.py` for default values and how configurations are loaded.
 
-## Developer Notes: Staying API Compliant
+## Contributing
 
-To ensure the SDK and any AI interactions remain compliant with the Snyk API, it's useful to have the OpenAPI specification handy.
-
-1.  **Create a `/tmp` directory** in the root of this project if it doesn't exist:
-    ```bash
-    mkdir -p tmp
-    ```
-2.  **Fetch the API Specification**:
-    You can download the OpenAPI specification for a specific Snyk API version using `curl`. For example, to get the spec for version `2024-10-15` (which is used by some parts of this SDK):
-    ```bash
-    curl -H "Authorization: token $SNYK_TOKEN" "https://api.snyk.io/rest/openapi/2024-10-15" -o tmp/openapi-2024-10-15.json
-    ```
-    Replace `2024-10-15` with the desired API version. You'll need your `SNYK_TOKEN` environment variable to be set.
-
-3.  **Querying the Specification**:
-    The downloaded JSON file can be queried using tools like `jq` to inspect endpoint definitions, parameters, and schemas. For example, to get the definition for the "List Organization Issues" endpoint:
-    ```bash
-    jq '.paths."/orgs/{org_id}/issues".get' tmp/openapi-2024-10-15.json
-    ```
-    Or to see the definition of a specific parameter like `ScanItemId`:
-    ```bash
-    jq '.components.parameters.ScanItemId' tmp/openapi-2024-10-15.json
-    ```
-    When working with an AI to modify or extend the SDK, pointing it to this local copy of the specification and instructing it to use `jq` for verification can help maintain accuracy and compliance with the API contract.
+We welcome contributions to the Snyker SDK! Whether you're a human developer or an AI agent, your help is appreciated. Please see our [Contributing Guidelines](CONTRIBUTING.md) for more information on how to get started.
 
 ## Roadmap / Todolist
 
