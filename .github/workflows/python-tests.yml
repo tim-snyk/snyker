@@ -2,9 +2,11 @@ name: Python SDK Tests
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   test:
@@ -32,7 +34,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        poetry install --no-interaction --no-root # Install dependencies specified in poetry.lock
+        poetry install --no-interaction
 
     - name: Lint with flake8
       run: |
