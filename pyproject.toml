@@ -1,5 +1,8 @@
 # pyproject.toml (fully converted for Poetry)
 
+[project]
+requires-python = ">=3.11"
+
 [tool.poetry]
 name = "snyker"
 version = "0.2.0"
