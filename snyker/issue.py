@@ -289,7 +289,7 @@ class IssuePydanticModel(BaseModel):
         organization: Optional[OrganizationPydanticModel] = None,
         project: Optional[ProjectPydanticModel] = None,
         group: Optional[GroupPydanticModel] = None,
-    ) -> IssuePydanticModel:
+    ) -> Optional[IssuePydanticModel]:
         """Creates an IssuePydanticModel instance from API response data.
 
         Args:
@@ -300,7 +300,8 @@ class IssuePydanticModel(BaseModel):
             group: The parent GroupPydanticModel instance, if applicable.
 
         Returns:
-            An instance of IssuePydanticModel.
+            An instance of IssuePydanticModel, or None if the issue is a group-level
+            issue without a project_id.
         """
         instance = cls(**issue_data)
         instance._api_client = api_client
@@ -308,6 +309,13 @@ class IssuePydanticModel(BaseModel):
         instance._project = project
         instance._group = group
         instance._logger = api_client.logger
+
+        if project:
+            instance._project = project
+        if organization:
+            instance._organization = organization
+        if group:
+            instance._group = group
 
         instance._logger.debug(
             f"[Issue ID: {instance.id}] Created issue object for '{instance.title}'"

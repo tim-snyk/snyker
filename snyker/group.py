@@ -276,6 +276,17 @@ class GroupPydanticModel(BaseModel):
             )
             org_futures.append(future)
 
+        org_futures = []
+        for org_data in org_data_items:
+            future = self._api_client.submit_task(
+                OrganizationPydanticModel.from_api_response,
+                org_data,
+                self._api_client,
+                self,
+                fetch_full_details_if_summary=True,
+            )
+            org_futures.append(future)
+
         org_results: List[OrganizationPydanticModel] = []
         for future in concurrent.futures.as_completed(org_futures):
             try:
@@ -287,12 +298,8 @@ class GroupPydanticModel(BaseModel):
                     f"[Group ID: {self.id}] Error instantiating Organization model: {e_future}",
                     exc_info=True,
                 )
-
         self._organizations = org_results
-        self._logger.info(
-            f"[Group ID: {self.id}] Fetched and instantiated {len(self._organizations)} organizations."
-        )
-        return self._organizations
+        return org_results
 
     def fetch_issues(
         self, params: Optional[Dict[str, Any]] = None
