@@ -109,8 +109,8 @@ def main():
 
     try:
         print(f"Fetching organizations for Group: {group.name} (ID: {group.id})...")
-        # Explicitly fetch all organizations. SDK uses lazy loading by default for properties.
-        organizations: List[OrganizationPydanticModel] = group.fetch_organizations()
+        # Explicitly fetch all organizations.
+        organizations: List[OrganizationPydanticModel] = group.organizations
         total_orgs_fetched = len(organizations)
         print(f"Fetched {total_orgs_fetched} organization(s).")
 
@@ -119,7 +119,7 @@ def main():
                 f"  Fetching projects for Organization {org_idx+1}/{total_orgs_fetched}: {org.name} (ID: {org.id})..."
             )
             # Explicitly fetch all projects for the organization.
-            projects: List[ProjectPydanticModel] = org.fetch_projects()
+            projects: List[ProjectPydanticModel] = org.projects
             current_org_projects_fetched = len(projects)
             total_projects_fetched += current_org_projects_fetched
             print(
@@ -138,32 +138,19 @@ def main():
                     f"      Fetching issues for Project {proj_idx+1}/{current_org_projects_fetched}: {shorten_project_name(proj.name)} (ID: {proj.id})..."
                 )
                 # Explicitly fetch all issues for the project.
-                # Requesting open and resolved issues. License and cloud types will be filtered client-side.
-                issue_params = {"status": "open,resolved"}
-                print(f"        Fetching issues with params: {issue_params}...")
-                all_issues_for_project: List[IssuePydanticModel] = proj.fetch_issues(
-                    params=issue_params
-                )
-
-                # Client-side filtering to exclude 'license' and 'cloud' types
-                filtered_issues = [
-                    iss
-                    for iss in all_issues_for_project
-                    if iss.attributes
-                    and iss.attributes.type not in ["license", "cloud"]
-                ]
-                project_issue_count = len(filtered_issues)
+                issues: List[IssuePydanticModel] = proj.issues
+                project_issue_count = len(issues)
 
                 total_issues_fetched += project_issue_count
                 org_data["total_issues_in_org"] += project_issue_count
 
                 first_issue_id_log = (
-                    f", First issue ID: {filtered_issues[0].id}"
-                    if filtered_issues
+                    f", First issue ID: {issues[0].id}"
+                    if issues
                     else ""
                 )
                 print(
-                    f"        Fetched {project_issue_count} issue(s) (excluding license/cloud) for Project '{shorten_project_name(proj.name)}'{first_issue_id_log}."
+                    f"        Fetched {project_issue_count} issue(s) for Project '{shorten_project_name(proj.name)}'{first_issue_id_log}."
                 )
 
                 org_data["projects"].append(
@@ -172,7 +159,7 @@ def main():
                         "display_name": shorten_project_name(proj.name),
                         "id": proj.id,
                         "type": proj.project_type,
-                        "issue_count": project_issue_count,  # This count is now non-license, non-cloud
+                        "issue_count": project_issue_count,
                     }
                 )
             fetched_data["organizations"].append(org_data)

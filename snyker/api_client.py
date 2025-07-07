@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import time
 from typing import Any, Callable, Dict, Iterator, Optional, Tuple, Union
 import concurrent.futures
@@ -145,6 +146,8 @@ class APIClient:
                     )
                     time.sleep(wait_time)
                 self.rate_limit_delay = 0.0  # Reset delay
+                # Add a small random delay to stagger requests
+                time.sleep(random.uniform(0.1, 0.5))
 
     def _handle_response(self, response: requests.Response) -> requests.Response:
         """

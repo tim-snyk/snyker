@@ -318,26 +318,20 @@ class OrganizationPydanticModel(BaseModel):
                 self._projects = []
             return []
 
-        project_futures = []
-        for project_data in project_data_items:
-            future = self._api_client.submit_task(
-                ProjectPydanticModel.from_api_response,
-                project_data,
-                self._api_client,
-                self,
-                self._group,
-            )
-            project_futures.append(future)
-
         project_results: List[ProjectPydanticModel] = []
-        for future in concurrent.futures.as_completed(project_futures):
+        for project_data in project_data_items:
             try:
-                project_instance = future.result()
+                project_instance = ProjectPydanticModel.from_api_response(
+                    project_data,
+                    self._api_client,
+                    self,
+                    self._group,
+                )
                 if project_instance:
                     project_results.append(project_instance)
-            except Exception as e_future:
+            except Exception as e_project:
                 self._logger.error(
-                    f"[Org ID: {self.id}] Error instantiating Project model: {e_future}",
+                    f"[Org ID: {self.id}] Error instantiating Project model: {e_project}",
                     exc_info=True,
                 )
 
